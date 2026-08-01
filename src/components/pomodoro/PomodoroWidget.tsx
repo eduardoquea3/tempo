@@ -1,4 +1,4 @@
-import { useEffect, type CSSProperties, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { getModeLabel, getModeSubtitle, formatClock, type PomodoroMode, usePomodoroPreview } from "./pomodoroPreview";
 
@@ -68,6 +68,16 @@ function BellIcon() {
   );
 }
 
+function BellOffIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 5a4 4 0 0 0-4 4v2.2c0 .7-.2 1.4-.6 2L6 15h12l-1.4-1.8c-.4-.6-.6-1.3-.6-2V9a4 4 0 0 0-4-4z" />
+      <path d="M10 18a2 2 0 0 0 4 0" />
+      <path d="M5 5l14 14" />
+    </svg>
+  );
+}
+
 function LoopIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -75,6 +85,18 @@ function LoopIcon() {
       <path d="M17 8l2 4-4-1" />
       <path d="M17 17H9a4 4 0 0 1-4-4v-1" />
       <path d="M7 16l-2-4 4 1" />
+    </svg>
+  );
+}
+
+function LoopOffIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M7 7h8a4 4 0 0 1 4 4v1" />
+      <path d="M17 8l2 4-4-1" />
+      <path d="M17 17H9a4 4 0 0 1-4-4v-1" />
+      <path d="M7 16l-2-4 4 1" />
+      <path d="M5 5l14 14" />
     </svg>
   );
 }
@@ -91,12 +113,14 @@ function TogglePill({
   label,
   hint,
   icon,
+  offIcon,
   pressed,
   onClick,
 }: {
   label: string;
   hint: string;
   icon: ReactNode;
+  offIcon: ReactNode;
   pressed: boolean;
   onClick: () => void;
 }) {
@@ -107,7 +131,7 @@ function TogglePill({
         <div className="setting-row__hint">{hint}</div>
       </div>
       <button className="toggle" type="button" aria-pressed={pressed} onClick={onClick}>
-        <span className="toggle__icon">{icon}</span>
+        <span className="toggle__icon">{pressed ? icon : offIcon}</span>
       </button>
     </div>
   );
@@ -131,6 +155,17 @@ export function PomodoroWidget() {
   const pomodoro = usePomodoroPreview();
   const { state } = pomodoro;
   const widgetStyle = { ["--progress" as never]: `${pomodoro.progress}%` } as CSSProperties;
+  const [settingsMounted, setSettingsMounted] = useState(false);
+
+  useEffect(() => {
+    if (state.settingsOpen) {
+      setSettingsMounted(true);
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => setSettingsMounted(false), 220);
+    return () => window.clearTimeout(timeoutId);
+  }, [state.settingsOpen]);
 
   useEffect(() => {
     if (!state.settingsOpen) return;
@@ -259,9 +294,18 @@ export function PomodoroWidget() {
          </div>
        </footer>
 
-        {state.settingsOpen && (
-          <div className="settings-overlay" role="presentation" onMouseDown={handleSettingsOverlayClick}>
-            <section className="settings-sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+        {settingsMounted && (
+          <div
+            className={state.settingsOpen ? "settings-overlay" : "settings-overlay is-closing"}
+            role="presentation"
+            onMouseDown={handleSettingsOverlayClick}
+          >
+            <section
+              className={state.settingsOpen ? "settings-sheet" : "settings-sheet is-closing"}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="settings-title"
+            >
               <div className="settings-sheet__handle" aria-hidden="true" />
               <header className="settings-sheet__header">
                 <div>
@@ -278,6 +322,7 @@ export function PomodoroWidget() {
                   label="Sound on finish"
                   hint="Un beep suave al completar el ciclo."
                   icon={<BellIcon />}
+                  offIcon={<BellOffIcon />}
                   pressed={state.soundEnabled}
                   onClick={pomodoro.toggleSound}
                 />
@@ -286,6 +331,7 @@ export function PomodoroWidget() {
                   label="Auto next"
                   hint="Pasa al siguiente modo sin abrir otra ventana."
                   icon={<LoopIcon />}
+                  offIcon={<LoopOffIcon />}
                   pressed={state.autoAdvance}
                   onClick={pomodoro.toggleAutoAdvance}
                 />
