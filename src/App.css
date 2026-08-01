@@ -187,7 +187,6 @@ button:focus-visible {
 
 .icon-btn svg,
 .action svg,
-.options-toggle svg,
 .toggle__icon svg {
   width: 16px;
   height: 16px;
@@ -374,7 +373,7 @@ button:focus-visible {
 
 .control-bar {
   display: grid;
-  grid-template-columns: 1.15fr 0.8fr 0.8fr 0.8fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -429,43 +428,64 @@ button:focus-visible {
   background: currentColor;
 }
 
-.options-toggle {
+.settings-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 12px;
+  background: rgba(8, 7, 6, 0.64);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  animation: settings-overlay-in 180ms ease both;
+}
+
+.settings-sheet {
+  width: min(100%, 420px);
+  border: 1px solid var(--border-2);
+  border-radius: 20px;
+  background: linear-gradient(180deg, var(--surface-3), var(--surface-2));
+  box-shadow: 0 24px 50px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  animation: settings-sheet-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.settings-sheet__handle {
+  width: 34px;
+  height: 4px;
+  margin: 9px auto 2px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.settings-sheet__header {
+  display: flex;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
-  padding-top: 2px;
-  color: var(--text-3);
-  font-size: 12px;
-  letter-spacing: 0.01em;
-  cursor: pointer;
+  gap: 16px;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--border-1);
 }
 
-.options-toggle span {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+.settings-sheet__eyebrow {
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
 }
 
-.options-toggle__state {
-  color: var(--text-2);
+.settings-sheet h2 {
+  margin: 3px 0 0;
+  font-size: 17px;
+  letter-spacing: -0.02em;
 }
 
-.settings-panel {
-  max-height: 0;
-  overflow: hidden;
-  border-top: 1px solid rgba(255, 255, 255, 0.07);
-  transition: max-height 220ms ease;
-}
-
-.settings-panel.is-open {
-  max-height: 220px;
-}
-
-.settings-panel__inner {
+.settings-sheet__body {
   display: grid;
-  gap: 12px;
-  padding-top: 14px;
+  gap: 4px;
+  padding: 10px 16px 16px;
 }
 
 .setting-row {
@@ -474,6 +494,16 @@ button:focus-visible {
   justify-content: space-between;
   gap: 12px;
   min-height: 42px;
+}
+
+@keyframes settings-overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes settings-sheet-in {
+  from { transform: translateY(18px); opacity: 0.7; }
+  to { transform: translateY(0); opacity: 1; }
 }
 
 .setting-row__copy {
@@ -595,11 +625,17 @@ button:focus-visible {
 }
 
 @media (max-width: 520px) {
+  .settings-overlay {
+    padding: 8px;
+  }
+
+  .settings-sheet {
+    width: 100%;
+    border-radius: 18px;
+  }
+
   .timer-dial__ring {
     width: 218px;
   }
 
-  .control-bar {
-    grid-template-columns: 1fr;
-  }
 }

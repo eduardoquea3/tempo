@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from "react";
+import { useEffect, type CSSProperties, type MouseEvent, type ReactNode } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { getModeLabel, getModeSubtitle, formatClock, type PomodoroMode, usePomodoroPreview } from "./pomodoroPreview";
 
@@ -50,10 +50,11 @@ function SkipIcon() {
   );
 }
 
-function ChevronIcon() {
+function CloseIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M6 9l6 6 6-6" />
+      <path d="M6 6l12 12" />
+      <path d="M18 6L6 18" />
     </svg>
   );
 }
@@ -131,6 +132,21 @@ export function PomodoroWidget() {
   const { state } = pomodoro;
   const widgetStyle = { ["--progress" as never]: `${pomodoro.progress}%` } as CSSProperties;
 
+  useEffect(() => {
+    if (!state.settingsOpen) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") pomodoro.toggleSettings();
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [pomodoro, state.settingsOpen]);
+
+  const handleSettingsOverlayClick = (event: MouseEvent<HTMLDivElement>) => {
+    if (event.target === event.currentTarget) pomodoro.toggleSettings();
+  };
+
   return (
     <main className="stage">
       <section
@@ -149,7 +165,13 @@ export function PomodoroWidget() {
           </div>
 
           <div className="toolbar">
-            <button className="icon-btn" type="button" aria-label="Abrir opciones" onClick={pomodoro.toggleSettings}>
+             <button
+               className="icon-btn"
+               type="button"
+               aria-label="Abrir opciones"
+               aria-expanded={state.settingsOpen}
+               onClick={pomodoro.toggleSettings}
+             >
               <MenuIcon />
             </button>
           </div>
@@ -214,35 +236,8 @@ export function PomodoroWidget() {
             </button>
           </div>
 
-          <button className="options-toggle" type="button" aria-expanded={state.settingsOpen} onClick={pomodoro.toggleSettings}>
-            <span>
-              <ChevronIcon />
-              Opciones básicas
-            </span>
-            <span className="options-toggle__state">{state.settingsOpen ? "Open" : "Closed"}</span>
-          </button>
-
-          <section className={state.settingsOpen ? "settings-panel is-open" : "settings-panel"} aria-hidden={!state.settingsOpen}>
-            <div className="settings-panel__inner">
-              <TogglePill
-                label="Sound on finish"
-                hint="Un beep suave al completar el ciclo."
-                icon={<BellIcon />}
-                pressed={state.soundEnabled}
-                onClick={pomodoro.toggleSound}
-              />
-
-              <TogglePill
-                label="Auto next"
-                hint="Pasa al siguiente modo sin abrir otra ventana."
-                icon={<LoopIcon />}
-                pressed={state.autoAdvance}
-                onClick={pomodoro.toggleAutoAdvance}
-              />
-            </div>
-          </section>
-          </div>
-        </ScrollArea>
+           </div>
+         </ScrollArea>
 
         <footer className="widget__footer">
           <div className="status-pill">
@@ -261,8 +256,43 @@ export function PomodoroWidget() {
           <div className="shortcut">
             <span className="kbd">Space</span>
             <span>Play</span>
+         </div>
+       </footer>
+
+        {state.settingsOpen && (
+          <div className="settings-overlay" role="presentation" onMouseDown={handleSettingsOverlayClick}>
+            <section className="settings-sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+              <div className="settings-sheet__handle" aria-hidden="true" />
+              <header className="settings-sheet__header">
+                <div>
+                  <div className="settings-sheet__eyebrow">Timer setup</div>
+                  <h2 id="settings-title">Opciones básicas</h2>
+                </div>
+                <button className="icon-btn" type="button" aria-label="Cerrar opciones" onClick={pomodoro.toggleSettings}>
+                  <CloseIcon />
+                </button>
+              </header>
+
+              <div className="settings-sheet__body">
+                <TogglePill
+                  label="Sound on finish"
+                  hint="Un beep suave al completar el ciclo."
+                  icon={<BellIcon />}
+                  pressed={state.soundEnabled}
+                  onClick={pomodoro.toggleSound}
+                />
+
+                <TogglePill
+                  label="Auto next"
+                  hint="Pasa al siguiente modo sin abrir otra ventana."
+                  icon={<LoopIcon />}
+                  pressed={state.autoAdvance}
+                  onClick={pomodoro.toggleAutoAdvance}
+                />
+              </div>
+            </section>
           </div>
-        </footer>
+        )}
       </section>
     </main>
   );
