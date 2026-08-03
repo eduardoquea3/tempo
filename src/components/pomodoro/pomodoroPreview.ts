@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { z } from "zod";
 
 export type PomodoroMode = "focus" | "shortBreak" | "longBreak";
 export type PomodoroStatus = "idle" | "running" | "paused" | "completed";
@@ -21,6 +22,8 @@ const defaultDurations: Record<PomodoroMode, number> = {
   shortBreak: 5 * 60,
   longBreak: 15 * 60,
 };
+
+export const durationMinutesSchema = z.number().int().min(1).max(180);
 
 const modeLabels: Record<PomodoroMode, string> = {
   focus: "Focus",
@@ -143,18 +146,24 @@ export function usePomodoroPreview() {
   };
 
   const skip = () => {
-    setState((current) => ({
-      ...current,
-      mode: getNextMode(current.mode, current.session, current.sessionsBeforeLongBreak),
-      status: "idle",
-      durationSeconds: current.durations[getNextMode(current.mode, current.session, current.sessionsBeforeLongBreak)],
-      remainingSeconds: current.durations[getNextMode(current.mode, current.session, current.sessionsBeforeLongBreak)],
-    }));
+    setState((current) => {
+      const nextMode = getNextMode(current.mode, current.session, current.sessionsBeforeLongBreak);
+      return {
+        ...current,
+        mode: nextMode,
+        session: current.mode === "focus" ? current.session + 1 : current.session,
+        status: "idle",
+        durationSeconds: current.durations[nextMode],
+        remainingSeconds: current.durations[nextMode],
+      };
+    });
   };
 
   const updateDuration = (mode: PomodoroMode, minutes: number) => {
-    const safeMinutes = Math.max(1, Math.min(180, Math.round(minutes) || 1));
-    const nextDuration = safeMinutes * 60;
+    const parsedMinutes = durationMinutesSchema.safeParse(minutes);
+    if (!parsedMinutes.success) return;
+
+    const nextDuration = parsedMinutes.data * 60;
 
     setState((current) => ({
       ...current,

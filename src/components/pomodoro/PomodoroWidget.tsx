@@ -1,6 +1,13 @@
 import { useEffect, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { getModeLabel, getModeSubtitle, formatClock, type PomodoroMode, usePomodoroPreview } from "./pomodoroPreview";
+import {
+  durationMinutesSchema,
+  getModeLabel,
+  getModeSubtitle,
+  formatClock,
+  type PomodoroMode,
+  usePomodoroPreview,
+} from "./pomodoroPreview";
 
 function MenuIcon() {
   return (
@@ -148,17 +155,35 @@ function DurationField({
   value: number;
   onChange: (mode: PomodoroMode, minutes: number) => void;
 }) {
+  const [draft, setDraft] = useState(String(value));
+  const [isInvalid, setIsInvalid] = useState(false);
+
+  useEffect(() => {
+    setDraft(String(value));
+    setIsInvalid(false);
+  }, [value]);
+
+  const handleChange = (nextValue: string) => {
+    setDraft(nextValue);
+    const result = durationMinutesSchema.safeParse(Number(nextValue));
+    setIsInvalid(!result.success);
+    if (result.success) onChange(mode, result.data);
+  };
+
   return (
     <label className="duration-field">
       <span>{label}</span>
       <span className="duration-field__input">
         <input
+          className={isInvalid ? "is-invalid" : undefined}
           type="number"
           min="1"
           max="180"
-          value={value}
+          value={draft}
+          inputMode="numeric"
+          aria-invalid={isInvalid}
           aria-label={`${label} en minutos`}
-          onChange={(event) => onChange(mode, Number(event.target.value))}
+          onChange={(event) => handleChange(event.target.value)}
         />
         <span>min</span>
       </span>
