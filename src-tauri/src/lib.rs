@@ -71,6 +71,16 @@ fn hide_main_window(app: &tauri::AppHandle) {
     }
 }
 
+fn toggle_main_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        if window.is_visible().unwrap_or(false) {
+            let _ = window.hide();
+        } else {
+            show_main_window(app);
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -83,7 +93,7 @@ pub fn run() {
             TrayIconBuilder::with_id("tempo-tray")
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&menu)
-                .show_menu_on_left_click(true)
+                .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id().as_ref() {
                     "open" => show_main_window(app),
                     "quit" => app.exit(0),
@@ -96,7 +106,7 @@ pub fn run() {
                         ..
                     } = event
                     {
-                        show_main_window(tray.app_handle());
+                        toggle_main_window(tray.app_handle());
                     }
                 })
                 .build(app)?;
@@ -107,10 +117,6 @@ pub fn run() {
         .on_window_event(|window, event| match event {
             WindowEvent::CloseRequested { api, .. } => {
                 api.prevent_close();
-                let app = window.app_handle();
-                hide_main_window(&app);
-            }
-            WindowEvent::Focused(false) => {
                 let app = window.app_handle();
                 hide_main_window(&app);
             }
