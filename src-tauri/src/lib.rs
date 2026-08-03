@@ -6,6 +6,36 @@ use tauri::{
     WindowEvent,
 };
 
+#[cfg(target_os = "windows")]
+fn taskbar_height() -> i32 {
+    use std::ptr::null;
+    use windows_sys::Win32::Foundation::RECT;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{FindWindowW, GetWindowRect};
+
+    let class_name: Vec<u16> = "Shell_TrayWnd".encode_utf16().chain([0]).collect();
+    let taskbar = unsafe { FindWindowW(class_name.as_ptr(), null()) };
+    if taskbar.is_null() {
+        return 0;
+    }
+
+    let mut rect = RECT {
+        left: 0,
+        top: 0,
+        right: 0,
+        bottom: 0,
+    };
+    if unsafe { GetWindowRect(taskbar, &mut rect) } == 0 {
+        return 0;
+    }
+
+    (rect.bottom - rect.top).max(0)
+}
+
+#[cfg(not(target_os = "windows"))]
+fn taskbar_height() -> i32 {
+    0
+}
+
 fn position_near_system_tray(window: &tauri::WebviewWindow) {
     let Ok(Some(monitor)) = window.current_monitor() else {
         return;
@@ -17,11 +47,11 @@ fn position_near_system_tray(window: &tauri::WebviewWindow) {
 
     let monitor_position = monitor.position();
     let monitor_size = monitor.size();
-    // Keep the popup close to the screen edge so Windows can reveal its
-    // auto-hidden taskbar without leaving a large empty gap.
+    let taskbar_height = taskbar_height();
+    // Keep the popup above the taskbar while preserving a small visual gap.
     let edge_margin = 8;
     let x = monitor_position.x + monitor_size.width as i32 - window_size.width as i32 - edge_margin;
-    let y = monitor_position.y + monitor_size.height as i32 - window_size.height as i32 - edge_margin;
+    let y = monitor_position.y + monitor_size.height as i32 - window_size.height as i32 - edge_margin - taskbar_height;
 
     let _ = window.set_position(PhysicalPosition::new(x.max(monitor_position.x), y.max(monitor_position.y)));
 }
@@ -74,12 +104,17 @@ pub fn run() {
             hide_main_window(&app.handle().clone());
             Ok(())
         })
-        .on_window_event(|window, event| {
-            if let WindowEvent::CloseRequested { api, .. } = event {
+        .on_window_event(|window, event| match event {
+            WindowEvent::CloseRequested { api, .. } => {
                 api.prevent_close();
                 let app = window.app_handle();
                 hide_main_window(&app);
             }
+            WindowEvent::Focused(false) => {
+                let app = window.app_handle();
+                hide_main_window(&app);
+            }
+            _ => {}
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
