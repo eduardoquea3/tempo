@@ -137,6 +137,35 @@ function TogglePill({
   );
 }
 
+function DurationField({
+  mode,
+  label,
+  value,
+  onChange,
+}: {
+  mode: PomodoroMode;
+  label: string;
+  value: number;
+  onChange: (mode: PomodoroMode, minutes: number) => void;
+}) {
+  return (
+    <label className="duration-field">
+      <span>{label}</span>
+      <span className="duration-field__input">
+        <input
+          type="number"
+          min="1"
+          max="180"
+          value={value}
+          aria-label={`${label} en minutos`}
+          onChange={(event) => onChange(mode, Number(event.target.value))}
+        />
+        <span>min</span>
+      </span>
+    </label>
+  );
+}
+
 function SessionDots({ activeIndex, total }: { activeIndex: number; total: number }) {
   return (
     <div className="session-strip" aria-label="Sesiones actuales">
@@ -177,6 +206,19 @@ export function PomodoroWidget() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [pomodoro, state.settingsOpen]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement;
+      if (event.code !== "Space" || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
+      if (target.closest("button, a")) return;
+      event.preventDefault();
+      pomodoro.toggleStatus();
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [pomodoro]);
 
   const handleSettingsOverlayClick = (event: MouseEvent<HTMLDivElement>) => {
     if (event.target === event.currentTarget) pomodoro.toggleSettings();
@@ -317,8 +359,15 @@ export function PomodoroWidget() {
                 </button>
               </header>
 
-              <div className="settings-sheet__body">
-                <TogglePill
+               <div className="settings-sheet__body">
+                 <div className="duration-section">
+                   <div className="settings-section__title">Duración por modo</div>
+                   <DurationField mode="focus" label="Focus" value={pomodoro.durationsInMinutes.focus} onChange={pomodoro.updateDuration} />
+                   <DurationField mode="shortBreak" label="Short break" value={pomodoro.durationsInMinutes.shortBreak} onChange={pomodoro.updateDuration} />
+                   <DurationField mode="longBreak" label="Long break" value={pomodoro.durationsInMinutes.longBreak} onChange={pomodoro.updateDuration} />
+                 </div>
+
+                 <TogglePill
                   label="Sound on finish"
                   hint="Un beep suave al completar el ciclo."
                   icon={<BellIcon />}

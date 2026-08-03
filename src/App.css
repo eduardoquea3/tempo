@@ -497,6 +497,55 @@ button:focus-visible {
   padding: 10px 16px 16px;
 }
 
+.duration-section {
+  display: grid;
+  gap: 7px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid var(--border-1);
+}
+
+.settings-section__title {
+  margin-bottom: 2px;
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.duration-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.duration-field__input {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.duration-field input {
+  width: 56px;
+  padding: 6px 7px;
+  border: 1px solid var(--border-1);
+  border-radius: 8px;
+  background: var(--surface-1);
+  color: var(--text-1);
+  font: 600 13px var(--font-mono);
+  text-align: right;
+}
+
+.duration-field input:focus {
+  outline: 2px solid rgba(255, 140, 74, 0.35);
+  outline-offset: 1px;
+}
+
 .setting-row {
   display: flex;
   align-items: center;
