@@ -1,4 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import {
+  isPermissionGranted,
+  requestPermission,
+  sendNotification,
+} from "@tauri-apps/plugin-notification";
 import { z } from "zod";
 
 export type PomodoroMode = "focus" | "shortBreak" | "longBreak";
@@ -86,7 +92,7 @@ function readPersistedSettings() {
   }
 }
 
-function playCompletionSound(audioContext: AudioContext | null) {
+function playWebCompletionSound(audioContext: AudioContext | null) {
   if (!audioContext) return;
 
   const play = () => {
@@ -119,6 +125,32 @@ function playCompletionSound(audioContext: AudioContext | null) {
     play();
   } catch {
     // Audio may be unavailable in restricted webviews; the timer must keep working.
+  }
+}
+
+async function playCompletionSound(audioContext: AudioContext | null) {
+  try {
+    await invoke("play_completion_sound");
+  } catch {
+    playWebCompletionSound(audioContext);
+  }
+}
+
+async function sendCompletionNotification(mode: PomodoroMode) {
+  try {
+    let permissionGranted = await isPermissionGranted();
+    if (!permissionGranted) {
+      permissionGranted = await requestPermission() === "granted";
+    }
+
+    if (permissionGranted) {
+      await sendNotification({
+        title: "Tempo",
+        body: `${getModeLabel(mode)} terminó.`,
+      });
+    }
+  } catch {
+    // Notifications may be unavailable or denied by the operating system.
   }
 }
 
@@ -224,7 +256,11 @@ export function usePomodoroPreview() {
     const completed = previous.status === "running"
       && (state.status === "completed" || previous.mode !== state.mode);
 
-    if (completed && state.soundEnabled) playCompletionSound(prepareAudioContext());
+    if (completed) {
+      const completedMode = state.status === "completed" ? state.mode : previous.mode;
+      if (state.soundEnabled) void playCompletionSound(prepareAudioContext());
+      void sendCompletionNotification(completedMode);
+    }
     previousCompletionState.current = { status: state.status, mode: state.mode };
   }, [state.mode, state.soundEnabled, state.status]);
 

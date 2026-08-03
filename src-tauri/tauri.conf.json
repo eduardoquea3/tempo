@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "tempo",
+  "productName": "Tempo",
   "version": "0.1.0",
   "identifier": "com.eduar.tempo",
   "build": {
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "tempo",
+        "title": "Tempo",
         "width": 400,
         "height": 620,
         "visible": false,

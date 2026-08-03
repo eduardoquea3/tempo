@@ -1,3 +1,9 @@
+use std::{
+    sync::atomic::{AtomicU64, Ordering},
+    sync::Arc,
+    time::Duration,
+};
+
 use tauri::{
     PhysicalPosition,
     Manager,
@@ -5,6 +11,11 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     WindowEvent,
 };
+
+#[derive(Default)]
+struct TrayInteraction {
+    focus_generation: Arc<AtomicU64>,
+}
 
 #[cfg(target_os = "windows")]
 fn taskbar_height() -> i32 {
@@ -71,6 +82,21 @@ fn hide_main_window(app: &tauri::AppHandle) {
     }
 }
 
+#[tauri::command]
+fn play_completion_sound() -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        let played = unsafe { windows_sys::Win32::System::Diagnostics::Debug::MessageBeep(0x00000030) };
+        if played == 0 {
+            return Err("Windows could not play the completion sound".to_string());
+        }
+        return Ok(());
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    Err("Native completion sound is not available on this platform".to_string())
+}
+
 fn toggle_main_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         if window.is_visible().unwrap_or(false) {
@@ -81,10 +107,18 @@ fn toggle_main_window(app: &tauri::AppHandle) {
     }
 }
 
+fn mark_tray_interaction(app: &tauri::AppHandle) {
+    let interaction = app.state::<TrayInteraction>();
+    interaction.focus_generation.fetch_add(1, Ordering::SeqCst);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(TrayInteraction::default())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
+        .invoke_handler(tauri::generate_handler![play_completion_sound])
         .setup(|app| {
             let open_item = MenuItemBuilder::with_id("open", "Open").build(app)?;
             let quit_item = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
@@ -95,11 +129,24 @@ pub fn run() {
                 .menu(&menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id().as_ref() {
-                    "open" => show_main_window(app),
+                    "open" => {
+                        mark_tray_interaction(app);
+                        show_main_window(app);
+                    }
                     "quit" => app.exit(0),
                     _ => {}
                 })
                 .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Down,
+                        ..
+                    } = event
+                    {
+                        mark_tray_interaction(tray.app_handle());
+                        return;
+                    }
+
                     if let TrayIconEvent::Click {
                         button: MouseButton::Left,
                         button_state: MouseButtonState::Up,
@@ -115,6 +162,25 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| match event {
+            WindowEvent::Focused(false) => {
+                let app = window.app_handle().clone();
+                let interaction = app.state::<TrayInteraction>();
+                let generation = interaction.focus_generation.load(Ordering::SeqCst);
+                let focus_generation = interaction.focus_generation.clone();
+
+                std::thread::spawn(move || {
+                    std::thread::sleep(Duration::from_millis(120));
+                    if focus_generation.load(Ordering::SeqCst) != generation {
+                        return;
+                    }
+
+                    if let Some(window) = app.get_webview_window("main") {
+                        if !window.is_focused().unwrap_or(false) {
+                            let _ = window.hide();
+                        }
+                    }
+                });
+            }
             WindowEvent::CloseRequested { api, .. } => {
                 api.prevent_close();
                 let app = window.app_handle();
