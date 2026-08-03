@@ -1,4 +1,5 @@
 import { useEffect, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
+import { motion } from "motion/react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   durationMinutesSchema,
@@ -297,15 +298,20 @@ export function PomodoroWidget() {
           </div>
 
           <section className="timer-dial" aria-label="Temporizador">
-            <div className="timer-dial__ring">
-              <div className="timer-dial__core">
+             <motion.div
+               className="timer-dial__ring"
+               style={{ ["--progress" as never]: `${pomodoro.progress}%` } as CSSProperties}
+               animate={{ "--progress": `${pomodoro.progress}%` } as Record<string, string>}
+               transition={{ duration: 0.12, ease: "linear" }}
+             >
+               <div className="timer-dial__core">
                 <div className="timer-dial__label">{getModeLabel(state.mode)}</div>
-                <div className="timer-dial__time" aria-live="polite">
-                  {formatClock(state.remainingSeconds)}
-                </div>
-                <div className="timer-dial__subtitle">{getModeSubtitle(state.mode)}</div>
-              </div>
-            </div>
+                 <div className="timer-dial__time" aria-live="polite">
+                   {formatClock(state.remainingSeconds)}
+                 </div>
+                 <div className="timer-dial__subtitle">{getModeSubtitle(state.mode)}</div>
+               </div>
+             </motion.div>
           </section>
 
           <div className="session-stack">

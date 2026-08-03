@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
 
 export type PomodoroMode = "focus" | "shortBreak" | "longBreak";
@@ -24,6 +24,18 @@ const defaultDurations: Record<PomodoroMode, number> = {
 };
 
 export const durationMinutesSchema = z.number().int().min(1).max(180);
+const durationSecondsSchema = z.number().int().min(60).max(180 * 60);
+const persistedSettingsSchema = z.object({
+  durations: z.object({
+    focus: durationSecondsSchema,
+    shortBreak: durationSecondsSchema,
+    longBreak: durationSecondsSchema,
+  }).partial().optional(),
+  soundEnabled: z.boolean().optional(),
+  autoAdvance: z.boolean().optional(),
+}).partial();
+
+const settingsStorageKey = "tempo-pomodoro-settings";
 
 const modeLabels: Record<PomodoroMode, string> = {
   focus: "Focus",
@@ -38,7 +50,7 @@ const modeSubtitles: Record<PomodoroMode, string> = {
 };
 
 export function formatClock(totalSeconds: number) {
-  const safe = Math.max(0, Math.floor(totalSeconds));
+  const safe = Math.max(0, Math.ceil(totalSeconds));
   const minutes = String(Math.floor(safe / 60)).padStart(2, "0");
   const seconds = String(safe % 60).padStart(2, "0");
   return `${minutes}:${seconds}`;
@@ -62,30 +74,128 @@ export function getProgress(state: Pick<PomodoroPreviewState, "remainingSeconds"
   return Math.max(0, Math.min(100, ((state.durationSeconds - state.remainingSeconds) / state.durationSeconds) * 100));
 }
 
+function readPersistedSettings() {
+  try {
+    const stored = window.localStorage.getItem(settingsStorageKey);
+    if (!stored) return null;
+
+    const result = persistedSettingsSchema.safeParse(JSON.parse(stored));
+    return result.success ? result.data : null;
+  } catch {
+    return null;
+  }
+}
+
+function playCompletionSound(audioContext: AudioContext | null) {
+  if (!audioContext) return;
+
+  const play = () => {
+    try {
+      const oscillator = audioContext.createOscillator();
+      const gain = audioContext.createGain();
+      const now = audioContext.currentTime;
+
+      oscillator.type = "sine";
+      oscillator.frequency.setValueAtTime(880, now);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.24, now + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.28);
+
+      oscillator.connect(gain);
+      gain.connect(audioContext.destination);
+      oscillator.start(now);
+      oscillator.stop(now + 0.28);
+    } catch {
+      // Audio may be unavailable in restricted webviews; the timer must keep working.
+    }
+  };
+
+  if (audioContext.state === "suspended") {
+    void audioContext.resume().then(play).catch(() => undefined);
+    return;
+  }
+
+  try {
+    play();
+  } catch {
+    // Audio may be unavailable in restricted webviews; the timer must keep working.
+  }
+}
+
 export function usePomodoroPreview() {
-  const [state, setState] = useState<PomodoroPreviewState>({
-    mode: "focus",
-    status: "idle",
-    remainingSeconds: defaultDurations.focus,
-    durationSeconds: defaultDurations.focus,
-    session: 2,
-    sessionsBeforeLongBreak: 4,
-    soundEnabled: true,
-    autoAdvance: true,
-    settingsOpen: false,
-    durations: defaultDurations,
+  const [state, setState] = useState<PomodoroPreviewState>(() => {
+    const persisted = readPersistedSettings();
+    const durations = { ...defaultDurations, ...persisted?.durations };
+
+    return {
+      mode: "focus",
+      status: "idle",
+      remainingSeconds: durations.focus,
+      durationSeconds: durations.focus,
+      session: 2,
+      sessionsBeforeLongBreak: 4,
+      soundEnabled: persisted?.soundEnabled ?? true,
+      autoAdvance: persisted?.autoAdvance ?? true,
+      settingsOpen: false,
+      durations,
+    };
   });
+  const previousCompletionState = useRef({ status: state.status, mode: state.mode });
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const lastTickAtRef = useRef<number | null>(null);
+
+  const prepareAudioContext = () => {
+    try {
+      if (!audioContextRef.current && typeof window.AudioContext !== "undefined") {
+        audioContextRef.current = new window.AudioContext();
+      }
+
+      const audioContext = audioContextRef.current;
+      if (audioContext?.state === "suspended") void audioContext.resume().catch(() => undefined);
+      return audioContext;
+    } catch {
+      return null;
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      const audioContext = audioContextRef.current;
+      if (audioContext && audioContext.state !== "closed") void audioContext.close();
+    };
+  }, []);
 
   const progress = useMemo(() => getProgress(state), [state]);
 
   useEffect(() => {
-    if (state.status !== "running") return;
+    try {
+      window.localStorage.setItem(settingsStorageKey, JSON.stringify({
+        durations: state.durations,
+        soundEnabled: state.soundEnabled,
+        autoAdvance: state.autoAdvance,
+      }));
+    } catch {
+      // Settings still work for the current session when storage is unavailable.
+    }
+  }, [state.autoAdvance, state.durations, state.soundEnabled]);
+
+  useEffect(() => {
+    if (state.status !== "running") {
+      lastTickAtRef.current = null;
+      return;
+    }
+
+    lastTickAtRef.current = performance.now();
 
     const intervalId = window.setInterval(() => {
+      const now = performance.now();
+      const elapsedSeconds = Math.max(0, (now - (lastTickAtRef.current ?? now)) / 1000);
+      lastTickAtRef.current = now;
+
       setState((current) => {
         if (current.status !== "running") return current;
-        if (current.remainingSeconds > 1) {
-          return { ...current, remainingSeconds: current.remainingSeconds - 1 };
+        if (current.remainingSeconds > elapsedSeconds) {
+          return { ...current, remainingSeconds: current.remainingSeconds - elapsedSeconds };
         }
 
         if (!current.autoAdvance) {
@@ -104,10 +214,19 @@ export function usePomodoroPreview() {
           remainingSeconds: nextDuration,
         };
       });
-    }, 1000);
+    }, 100);
 
     return () => window.clearInterval(intervalId);
   }, [state.status]);
+
+  useEffect(() => {
+    const previous = previousCompletionState.current;
+    const completed = previous.status === "running"
+      && (state.status === "completed" || previous.mode !== state.mode);
+
+    if (completed && state.soundEnabled) playCompletionSound(prepareAudioContext());
+    previousCompletionState.current = { status: state.status, mode: state.mode };
+  }, [state.mode, state.soundEnabled, state.status]);
 
   const selectMode = (mode: PomodoroMode) => {
     setState((current) => ({
@@ -120,6 +239,8 @@ export function usePomodoroPreview() {
   };
 
   const toggleStatus = () => {
+    if (state.status !== "running" && state.soundEnabled) prepareAudioContext();
+
     setState((current) => {
       if (current.status === "running") {
         return { ...current, status: "paused" };
@@ -190,6 +311,7 @@ export function usePomodoroPreview() {
   };
 
   const toggleSound = () => {
+    if (!state.soundEnabled) prepareAudioContext();
     setState((current) => ({ ...current, soundEnabled: !current.soundEnabled }));
   };
 
