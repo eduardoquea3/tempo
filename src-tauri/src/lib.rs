@@ -1,20 +1,239 @@
 use std::{
     sync::atomic::{AtomicU64, Ordering},
-    sync::Arc,
-    time::Duration,
+    sync::{Arc, Mutex},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+use serde::{Deserialize, Serialize};
+use tempo_core::{Mode, PomodoroConfig, PomodoroState, Snapshot};
+
 use tauri::{
-    PhysicalPosition,
-    Manager,
     menu::{MenuBuilder, MenuItemBuilder},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    WindowEvent,
+    Manager, PhysicalPosition, WindowEvent,
 };
 
 #[derive(Default)]
 struct TrayInteraction {
     focus_generation: Arc<AtomicU64>,
+}
+
+#[derive(Default)]
+struct TempoState {
+    state: Mutex<PomodoroState>,
+    config: Mutex<PomodoroConfig>,
+}
+
+#[derive(Deserialize, Serialize)]
+struct PersistedTempo {
+    state: PomodoroState,
+    config: PomodoroConfig,
+}
+
+fn now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
+}
+
+fn tempo_snapshot(state: &TempoState) -> Snapshot {
+    let mut timer = state.state.lock().expect("tempo state poisoned");
+    let config = state.config.lock().expect("tempo config poisoned");
+    let now = now_ms();
+    timer.complete_if_elapsed(&config, now);
+    timer.advance_if_ready(&config, now);
+    timer.snapshot(&config, now)
+}
+
+#[tauri::command]
+fn tempo_status(state: tauri::State<'_, TempoState>) -> Snapshot {
+    tempo_snapshot(&state)
+}
+
+fn mutate_tempo(
+    app: &tauri::AppHandle,
+    state: &TempoState,
+    action: impl FnOnce(&mut PomodoroState, &PomodoroConfig) -> Result<(), String>,
+) -> Result<Snapshot, String> {
+    let mut timer = state
+        .state
+        .lock()
+        .map_err(|_| "tempo state poisoned".to_string())?;
+    let config = state
+        .config
+        .lock()
+        .map_err(|_| "tempo config poisoned".to_string())?;
+    let now = now_ms();
+    timer.complete_if_elapsed(&config, now);
+    timer.advance_if_ready(&config, now);
+    action(&mut timer, &config)?;
+    let snapshot = timer.snapshot(&config, now_ms());
+    persist_tempo(app, &timer, &config)?;
+    Ok(snapshot)
+}
+
+fn persist_tempo(
+    app: &tauri::AppHandle,
+    state: &PomodoroState,
+    config: &PomodoroConfig,
+) -> Result<(), String> {
+    let directory = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&directory).map_err(|e| e.to_string())?;
+    let value = PersistedTempo {
+        state: state.clone(),
+        config: config.clone(),
+    };
+    let bytes = serde_json::to_vec_pretty(&value).map_err(|e| e.to_string())?;
+    let path = directory.join("tempo.json");
+    let temporary_path = directory.join("tempo.json.tmp");
+    std::fs::write(&temporary_path, bytes).map_err(|e| e.to_string())?;
+    replace_persisted_file(&temporary_path, &path)
+}
+
+#[cfg(windows)]
+fn replace_persisted_file(
+    temporary_path: &std::path::Path,
+    path: &std::path::Path,
+) -> Result<(), String> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::{MoveFileExW, MOVEFILE_REPLACE_EXISTING};
+
+    let source = temporary_path
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let destination = path
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+
+    if unsafe {
+        MoveFileExW(
+            source.as_ptr(),
+            destination.as_ptr(),
+            MOVEFILE_REPLACE_EXISTING,
+        )
+    } == 0
+    {
+        return Err(std::io::Error::last_os_error().to_string());
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn replace_persisted_file(
+    temporary_path: &std::path::Path,
+    path: &std::path::Path,
+) -> Result<(), String> {
+    std::fs::rename(temporary_path, path).map_err(|e| e.to_string())
+}
+
+fn load_persisted_tempo(app: &tauri::AppHandle) -> Option<PersistedTempo> {
+    let path = app.path().app_data_dir().ok()?.join("tempo.json");
+    let bytes = std::fs::read(path).ok()?;
+    serde_json::from_slice(&bytes).ok()
+}
+
+#[tauri::command]
+fn tempo_start(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, TempoState>,
+) -> Result<Snapshot, String> {
+    mutate_tempo(&app, &state, |timer, _| {
+        timer.start(now_ms()).map_err(|e| e.to_string())
+    })
+}
+#[tauri::command]
+fn tempo_pause(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, TempoState>,
+) -> Result<Snapshot, String> {
+    mutate_tempo(&app, &state, |timer, _| {
+        timer.pause(now_ms()).map_err(|e| e.to_string())
+    })
+}
+#[tauri::command]
+fn tempo_resume(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, TempoState>,
+) -> Result<Snapshot, String> {
+    mutate_tempo(&app, &state, |timer, _| {
+        timer.resume(now_ms()).map_err(|e| e.to_string())
+    })
+}
+#[tauri::command]
+fn tempo_toggle(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, TempoState>,
+) -> Result<Snapshot, String> {
+    mutate_tempo(&app, &state, |timer, _| {
+        timer.toggle(now_ms()).map_err(|e| e.to_string())
+    })
+}
+#[tauri::command]
+fn tempo_skip(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, TempoState>,
+) -> Result<Snapshot, String> {
+    mutate_tempo(&app, &state, |timer, config| {
+        timer.skip(config);
+        Ok(())
+    })
+}
+#[tauri::command]
+fn tempo_stop(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, TempoState>,
+) -> Result<Snapshot, String> {
+    mutate_tempo(&app, &state, |timer, _| {
+        timer.stop();
+        Ok(())
+    })
+}
+#[tauri::command]
+fn tempo_reset(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, TempoState>,
+) -> Result<Snapshot, String> {
+    mutate_tempo(&app, &state, |timer, _| {
+        timer.reset();
+        Ok(())
+    })
+}
+#[tauri::command]
+fn tempo_set_mode(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, TempoState>,
+    mode: Mode,
+) -> Result<Snapshot, String> {
+    mutate_tempo(&app, &state, |timer, _| {
+        timer.set_mode(mode);
+        Ok(())
+    })
+}
+#[tauri::command]
+fn tempo_set_config(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, TempoState>,
+    config: PomodoroConfig,
+) -> Result<Snapshot, String> {
+    let mut timer = state
+        .state
+        .lock()
+        .map_err(|_| "tempo state poisoned".to_string())?;
+    let mut value = state
+        .config
+        .lock()
+        .map_err(|_| "tempo config poisoned".to_string())?;
+    *value = config.clone();
+    let now = now_ms();
+    timer.complete_if_elapsed(&config, now);
+    timer.advance_if_ready(&config, now);
+    persist_tempo(&app, &timer, &config)?;
+    Ok(timer.snapshot(&config, now))
 }
 
 #[cfg(target_os = "windows")]
@@ -62,9 +281,15 @@ fn position_near_system_tray(window: &tauri::WebviewWindow) {
     // Keep the popup above the taskbar while preserving a small visual gap.
     let edge_margin = 8;
     let x = monitor_position.x + monitor_size.width as i32 - window_size.width as i32 - edge_margin;
-    let y = monitor_position.y + monitor_size.height as i32 - window_size.height as i32 - edge_margin - taskbar_height;
+    let y = monitor_position.y + monitor_size.height as i32
+        - window_size.height as i32
+        - edge_margin
+        - taskbar_height;
 
-    let _ = window.set_position(PhysicalPosition::new(x.max(monitor_position.x), y.max(monitor_position.y)));
+    let _ = window.set_position(PhysicalPosition::new(
+        x.max(monitor_position.x),
+        y.max(monitor_position.y),
+    ));
 }
 
 fn show_main_window(app: &tauri::AppHandle) {
@@ -86,15 +311,30 @@ fn hide_main_window(app: &tauri::AppHandle) {
 fn play_completion_sound() -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
-        let played = unsafe { windows_sys::Win32::System::Diagnostics::Debug::MessageBeep(0x00000030) };
+        use windows_sys::Win32::Media::Audio::{PlaySoundW, SND_ASYNC, SND_MEMORY};
+
+        static SOUND: &[u8] = include_bytes!("../sounds/tempo-complete.wav");
+        let played = unsafe {
+            PlaySoundW(
+                SOUND.as_ptr() as windows_sys::core::PCWSTR,
+                std::ptr::null_mut(),
+                SND_ASYNC | SND_MEMORY,
+            )
+        };
         if played == 0 {
-            return Err("Windows could not play the completion sound".to_string());
+            return Err("Windows could not play Tempo's completion sound".to_string());
         }
         return Ok(());
     }
 
     #[cfg(not(target_os = "windows"))]
     Err("Native completion sound is not available on this platform".to_string())
+}
+
+#[tauri::command]
+fn tempo_show(app: tauri::AppHandle) -> Result<(), String> {
+    show_main_window(&app);
+    Ok(())
 }
 
 fn toggle_main_window(app: &tauri::AppHandle) {
@@ -116,16 +356,57 @@ fn mark_tray_interaction(app: &tauri::AppHandle) {
 pub fn run() {
     tauri::Builder::default()
         .manage(TrayInteraction::default())
+        .manage(TempoState::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
-        .invoke_handler(tauri::generate_handler![play_completion_sound])
+        .invoke_handler(tauri::generate_handler![
+            play_completion_sound,
+            tempo_show,
+            tempo_status,
+            tempo_start,
+            tempo_pause,
+            tempo_resume,
+            tempo_toggle,
+            tempo_skip,
+            tempo_stop,
+            tempo_reset,
+            tempo_set_mode,
+            tempo_set_config
+        ])
         .setup(|app| {
+            let app_handle = app.handle().clone();
+            if let Some(saved) = load_persisted_tempo(&app_handle) {
+                let state = app.state::<TempoState>();
+                *state
+                    .state
+                    .lock()
+                    .map_err(|_| std::io::Error::other("tempo state poisoned"))? = saved.state;
+                *state
+                    .config
+                    .lock()
+                    .map_err(|_| std::io::Error::other("tempo config poisoned"))? = saved.config;
+            }
+            {
+                let state = app.state::<TempoState>();
+                let timer = state
+                    .state
+                    .lock()
+                    .map_err(|_| std::io::Error::other("tempo state poisoned"))?;
+                let config = state
+                    .config
+                    .lock()
+                    .map_err(|_| std::io::Error::other("tempo config poisoned"))?;
+                persist_tempo(&app_handle, &timer, &config).map_err(std::io::Error::other)?;
+            }
             let open_item = MenuItemBuilder::with_id("open", "Open").build(app)?;
             let quit_item = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
-            let menu = MenuBuilder::new(app).items(&[&open_item, &quit_item]).build()?;
+            let menu = MenuBuilder::new(app)
+                .items(&[&open_item, &quit_item])
+                .build()?;
 
             TrayIconBuilder::with_id("tempo-tray")
                 .icon(app.default_window_icon().unwrap().clone())
+                .tooltip("Tempo")
                 .menu(&menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id().as_ref() {

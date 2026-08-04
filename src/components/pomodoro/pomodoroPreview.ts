@@ -30,19 +30,6 @@ const defaultDurations: Record<PomodoroMode, number> = {
 };
 
 export const durationMinutesSchema = z.number().int().min(1).max(180);
-const durationSecondsSchema = z.number().int().min(60).max(180 * 60);
-const persistedSettingsSchema = z.object({
-  durations: z.object({
-    focus: durationSecondsSchema,
-    shortBreak: durationSecondsSchema,
-    longBreak: durationSecondsSchema,
-  }).partial().optional(),
-  soundEnabled: z.boolean().optional(),
-  autoAdvance: z.boolean().optional(),
-}).partial();
-
-const settingsStorageKey = "tempo-pomodoro-settings";
-
 const modeLabels: Record<PomodoroMode, string> = {
   focus: "Focus",
   shortBreak: "Short break",
@@ -78,18 +65,6 @@ export function getNextMode(mode: PomodoroMode, session: number, sessionsBeforeL
 export function getProgress(state: Pick<PomodoroPreviewState, "remainingSeconds" | "durationSeconds">) {
   if (state.durationSeconds <= 0) return 0;
   return Math.max(0, Math.min(100, ((state.durationSeconds - state.remainingSeconds) / state.durationSeconds) * 100));
-}
-
-function readPersistedSettings() {
-  try {
-    const stored = window.localStorage.getItem(settingsStorageKey);
-    if (!stored) return null;
-
-    const result = persistedSettingsSchema.safeParse(JSON.parse(stored));
-    return result.success ? result.data : null;
-  } catch {
-    return null;
-  }
 }
 
 function playWebCompletionSound(audioContext: AudioContext | null) {
@@ -155,26 +130,26 @@ async function sendCompletionNotification(mode: PomodoroMode) {
 }
 
 export function usePomodoroPreview() {
-  const [state, setState] = useState<PomodoroPreviewState>(() => {
-    const persisted = readPersistedSettings();
-    const durations = { ...defaultDurations, ...persisted?.durations };
-
-    return {
-      mode: "focus",
-      status: "idle",
-      remainingSeconds: durations.focus,
-      durationSeconds: durations.focus,
-      session: 2,
-      sessionsBeforeLongBreak: 4,
-      soundEnabled: persisted?.soundEnabled ?? true,
-      autoAdvance: persisted?.autoAdvance ?? true,
-      settingsOpen: false,
-      durations,
-    };
-  });
+  const [state, setState] = useState<PomodoroPreviewState>(() => ({
+    mode: "focus", status: "idle", remainingSeconds: defaultDurations.focus,
+    durationSeconds: defaultDurations.focus, session: 1, sessionsBeforeLongBreak: 4,
+    soundEnabled: true, autoAdvance: true, settingsOpen: false, durations: defaultDurations,
+  }));
   const previousCompletionState = useRef({ status: state.status, mode: state.mode });
   const audioContextRef = useRef<AudioContext | null>(null);
-  const lastTickAtRef = useRef<number | null>(null);
+
+  type BackendSnapshot = { state: { mode: PomodoroMode; status: PomodoroStatus; session: number }; config: { durations: Record<string, number>; sessionsBeforeLongBreak: number; autoAdvance: boolean; soundEnabled: boolean }; durationSeconds: number; remainingSeconds: number };
+  const applySnapshot = (snapshot: BackendSnapshot) => setState((current) => ({
+    ...current, mode: snapshot.state.mode, status: snapshot.state.status,
+    session: snapshot.state.session, durationSeconds: snapshot.durationSeconds,
+    remainingSeconds: snapshot.remainingSeconds, sessionsBeforeLongBreak: snapshot.config.sessionsBeforeLongBreak,
+    soundEnabled: snapshot.config.soundEnabled, autoAdvance: snapshot.config.autoAdvance,
+    durations: { focus: snapshot.config.durations.focusSeconds, shortBreak: snapshot.config.durations.shortBreakSeconds, longBreak: snapshot.config.durations.longBreakSeconds },
+  }));
+
+  const refresh = async () => {
+    try { applySnapshot(await invoke<BackendSnapshot>("tempo_status")); } catch { /* The web preview has no timer authority. */ }
+  };
 
   const prepareAudioContext = () => {
     try {
@@ -190,131 +165,30 @@ export function usePomodoroPreview() {
     }
   };
 
-  useEffect(() => {
-    return () => {
-      const audioContext = audioContextRef.current;
-      if (audioContext && audioContext.state !== "closed") void audioContext.close();
-    };
-  }, []);
+  useEffect(() => { void refresh(); const interval = window.setInterval(() => void refresh(), 250); return () => window.clearInterval(interval); }, []);
+
+  useEffect(() => () => { const audioContext = audioContextRef.current; if (audioContext && audioContext.state !== "closed") void audioContext.close(); }, []);
 
   const progress = useMemo(() => getProgress(state), [state]);
 
   useEffect(() => {
-    try {
-      window.localStorage.setItem(settingsStorageKey, JSON.stringify({
-        durations: state.durations,
-        soundEnabled: state.soundEnabled,
-        autoAdvance: state.autoAdvance,
-      }));
-    } catch {
-      // Settings still work for the current session when storage is unavailable.
-    }
-  }, [state.autoAdvance, state.durations, state.soundEnabled]);
-
-  useEffect(() => {
-    if (state.status !== "running") {
-      lastTickAtRef.current = null;
-      return;
-    }
-
-    lastTickAtRef.current = performance.now();
-
-    const intervalId = window.setInterval(() => {
-      const now = performance.now();
-      const elapsedSeconds = Math.max(0, (now - (lastTickAtRef.current ?? now)) / 1000);
-      lastTickAtRef.current = now;
-
-      setState((current) => {
-        if (current.status !== "running") return current;
-        if (current.remainingSeconds > elapsedSeconds) {
-          return { ...current, remainingSeconds: current.remainingSeconds - elapsedSeconds };
-        }
-
-        if (!current.autoAdvance) {
-          return { ...current, status: "completed", remainingSeconds: 0 };
-        }
-
-        const nextMode = getNextMode(current.mode, current.session, current.sessionsBeforeLongBreak);
-        const nextSession = current.mode === "focus" ? current.session + 1 : current.session;
-        const nextDuration = current.durations[nextMode];
-
-        return {
-          ...current,
-          mode: nextMode,
-          session: nextSession,
-          durationSeconds: nextDuration,
-          remainingSeconds: nextDuration,
-        };
-      });
-    }, 100);
-
-    return () => window.clearInterval(intervalId);
-  }, [state.status]);
-
-  useEffect(() => {
     const previous = previousCompletionState.current;
-    const completed = previous.status === "running"
-      && (state.status === "completed" || previous.mode !== state.mode);
+    const completed = previous.status === "running" && state.status === "completed";
 
     if (completed) {
       const completedMode = state.status === "completed" ? state.mode : previous.mode;
+      void invoke("tempo_show").catch(() => undefined);
       if (state.soundEnabled) void playCompletionSound(prepareAudioContext());
       void sendCompletionNotification(completedMode);
     }
     previousCompletionState.current = { status: state.status, mode: state.mode };
   }, [state.mode, state.soundEnabled, state.status]);
 
-  const selectMode = (mode: PomodoroMode) => {
-    setState((current) => ({
-      ...current,
-      mode,
-      status: "idle",
-      durationSeconds: current.durations[mode],
-      remainingSeconds: current.durations[mode],
-    }));
-  };
-
-  const toggleStatus = () => {
-    if (state.status !== "running" && state.soundEnabled) prepareAudioContext();
-
-    setState((current) => {
-      if (current.status === "running") {
-        return { ...current, status: "paused" };
-      }
-
-      if (current.status === "completed") {
-        return {
-          ...current,
-          status: "running",
-          remainingSeconds: current.durationSeconds,
-        };
-      }
-
-      return { ...current, status: "running" };
-    });
-  };
-
-  const reset = () => {
-    setState((current) => ({
-      ...current,
-      status: "idle",
-      remainingSeconds: current.durationSeconds,
-    }));
-  };
-
-  const skip = () => {
-    setState((current) => {
-      const nextMode = getNextMode(current.mode, current.session, current.sessionsBeforeLongBreak);
-      return {
-        ...current,
-        mode: nextMode,
-        session: current.mode === "focus" ? current.session + 1 : current.session,
-        status: "idle",
-        durationSeconds: current.durations[nextMode],
-        remainingSeconds: current.durations[nextMode],
-      };
-    });
-  };
+  const run = (command: string) => void invoke<BackendSnapshot>(command).then(applySnapshot).catch(() => undefined);
+  const selectMode = (mode: PomodoroMode) => void invoke<BackendSnapshot>("tempo_set_mode", { mode }).then(applySnapshot).catch(() => undefined);
+  const toggleStatus = () => { if (state.status !== "running" && state.soundEnabled) prepareAudioContext(); run("tempo_toggle"); };
+  const reset = () => run("tempo_reset");
+  const skip = () => run("tempo_skip");
 
   const updateDuration = (mode: PomodoroMode, minutes: number) => {
     const parsedMinutes = durationMinutesSchema.safeParse(minutes);
@@ -322,38 +196,23 @@ export function usePomodoroPreview() {
 
     const nextDuration = parsedMinutes.data * 60;
 
-    setState((current) => ({
-      ...current,
-      durations: { ...current.durations, [mode]: nextDuration },
-      durationSeconds: current.mode === mode ? nextDuration : current.durationSeconds,
-      remainingSeconds: current.mode === mode
-        ? current.status === "running"
-          ? Math.max(0, nextDuration - Math.max(0, current.durationSeconds - current.remainingSeconds))
-          : nextDuration
-        : current.remainingSeconds,
-    }));
+    const durations = { ...state.durations, [mode]: nextDuration };
+    const config = { durations: { focusSeconds: durations.focus, shortBreakSeconds: durations.shortBreak, longBreakSeconds: durations.longBreak }, sessionsBeforeLongBreak: state.sessionsBeforeLongBreak, autoAdvance: state.autoAdvance, soundEnabled: state.soundEnabled };
+    void invoke<BackendSnapshot>("tempo_set_config", { config }).then(applySnapshot).catch(() => undefined);
   };
 
-  const stop = () => {
-    setState((current) => ({
-      ...current,
-      status: "idle",
-      remainingSeconds: current.durationSeconds,
-    }));
-  };
+  const stop = () => run("tempo_stop");
 
   const toggleSettings = () => {
     setState((current) => ({ ...current, settingsOpen: !current.settingsOpen }));
   };
 
-  const toggleSound = () => {
-    if (!state.soundEnabled) prepareAudioContext();
-    setState((current) => ({ ...current, soundEnabled: !current.soundEnabled }));
+  const updateConfig = (next: Partial<Pick<PomodoroPreviewState, "soundEnabled" | "autoAdvance">>) => {
+    const config = { durations: { focusSeconds: state.durations.focus, shortBreakSeconds: state.durations.shortBreak, longBreakSeconds: state.durations.longBreak }, sessionsBeforeLongBreak: state.sessionsBeforeLongBreak, autoAdvance: next.autoAdvance ?? state.autoAdvance, soundEnabled: next.soundEnabled ?? state.soundEnabled };
+    void invoke<BackendSnapshot>("tempo_set_config", { config }).then(applySnapshot).catch(() => undefined);
   };
-
-  const toggleAutoAdvance = () => {
-    setState((current) => ({ ...current, autoAdvance: !current.autoAdvance }));
-  };
+  const toggleSound = () => { if (!state.soundEnabled) prepareAudioContext(); updateConfig({ soundEnabled: !state.soundEnabled }); };
+  const toggleAutoAdvance = () => updateConfig({ autoAdvance: !state.autoAdvance });
 
   const durationsInMinutes = {
     focus: Math.round(state.durations.focus / 60),
