@@ -415,6 +415,15 @@ export function PomodoroWidget() {
                   pressed={state.autoAdvance}
                   onClick={pomodoro.toggleAutoAdvance}
                 />
+
+                <TogglePill
+                  label="Start with Windows"
+                  hint="Abre Tempo automáticamente al iniciar sesión."
+                  icon={<LoopIcon />}
+                  offIcon={<LoopOffIcon />}
+                  pressed={state.startOnLogin}
+                  onClick={pomodoro.toggleAutoStart}
+                />
               </div>
             </section>
           </div>

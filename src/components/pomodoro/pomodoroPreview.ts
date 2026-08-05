@@ -19,6 +19,7 @@ export interface PomodoroPreviewState {
   sessionsBeforeLongBreak: number;
   soundEnabled: boolean;
   autoAdvance: boolean;
+  startOnLogin: boolean;
   settingsOpen: boolean;
   durations: Record<PomodoroMode, number>;
 }
@@ -133,17 +134,18 @@ export function usePomodoroPreview() {
   const [state, setState] = useState<PomodoroPreviewState>(() => ({
     mode: "focus", status: "idle", remainingSeconds: defaultDurations.focus,
     durationSeconds: defaultDurations.focus, session: 1, sessionsBeforeLongBreak: 4,
-    soundEnabled: true, autoAdvance: true, settingsOpen: false, durations: defaultDurations,
+    soundEnabled: true, autoAdvance: true, startOnLogin: false, settingsOpen: false, durations: defaultDurations,
   }));
   const previousCompletionState = useRef({ status: state.status, mode: state.mode });
   const audioContextRef = useRef<AudioContext | null>(null);
 
-  type BackendSnapshot = { state: { mode: PomodoroMode; status: PomodoroStatus; session: number }; config: { durations: Record<string, number>; sessionsBeforeLongBreak: number; autoAdvance: boolean; soundEnabled: boolean }; durationSeconds: number; remainingSeconds: number };
+  type BackendSnapshot = { state: { mode: PomodoroMode; status: PomodoroStatus; session: number }; config: { durations: Record<string, number>; sessionsBeforeLongBreak: number; autoAdvance: boolean; soundEnabled: boolean; startOnLogin: boolean }; durationSeconds: number; remainingSeconds: number };
   const applySnapshot = (snapshot: BackendSnapshot) => setState((current) => ({
     ...current, mode: snapshot.state.mode, status: snapshot.state.status,
     session: snapshot.state.session, durationSeconds: snapshot.durationSeconds,
     remainingSeconds: snapshot.remainingSeconds, sessionsBeforeLongBreak: snapshot.config.sessionsBeforeLongBreak,
     soundEnabled: snapshot.config.soundEnabled, autoAdvance: snapshot.config.autoAdvance,
+    startOnLogin: snapshot.config.startOnLogin,
     durations: { focus: snapshot.config.durations.focusSeconds, shortBreak: snapshot.config.durations.shortBreakSeconds, longBreak: snapshot.config.durations.longBreakSeconds },
   }));
 
@@ -197,7 +199,7 @@ export function usePomodoroPreview() {
     const nextDuration = parsedMinutes.data * 60;
 
     const durations = { ...state.durations, [mode]: nextDuration };
-    const config = { durations: { focusSeconds: durations.focus, shortBreakSeconds: durations.shortBreak, longBreakSeconds: durations.longBreak }, sessionsBeforeLongBreak: state.sessionsBeforeLongBreak, autoAdvance: state.autoAdvance, soundEnabled: state.soundEnabled };
+    const config = { durations: { focusSeconds: durations.focus, shortBreakSeconds: durations.shortBreak, longBreakSeconds: durations.longBreak }, sessionsBeforeLongBreak: state.sessionsBeforeLongBreak, autoAdvance: state.autoAdvance, soundEnabled: state.soundEnabled, startOnLogin: state.startOnLogin };
     void invoke<BackendSnapshot>("tempo_set_config", { config }).then(applySnapshot).catch(() => undefined);
   };
 
@@ -207,12 +209,13 @@ export function usePomodoroPreview() {
     setState((current) => ({ ...current, settingsOpen: !current.settingsOpen }));
   };
 
-  const updateConfig = (next: Partial<Pick<PomodoroPreviewState, "soundEnabled" | "autoAdvance">>) => {
-    const config = { durations: { focusSeconds: state.durations.focus, shortBreakSeconds: state.durations.shortBreak, longBreakSeconds: state.durations.longBreak }, sessionsBeforeLongBreak: state.sessionsBeforeLongBreak, autoAdvance: next.autoAdvance ?? state.autoAdvance, soundEnabled: next.soundEnabled ?? state.soundEnabled };
+  const updateConfig = (next: Partial<Pick<PomodoroPreviewState, "soundEnabled" | "autoAdvance" | "startOnLogin">>) => {
+    const config = { durations: { focusSeconds: state.durations.focus, shortBreakSeconds: state.durations.shortBreak, longBreakSeconds: state.durations.longBreak }, sessionsBeforeLongBreak: state.sessionsBeforeLongBreak, autoAdvance: next.autoAdvance ?? state.autoAdvance, soundEnabled: next.soundEnabled ?? state.soundEnabled, startOnLogin: next.startOnLogin ?? state.startOnLogin };
     void invoke<BackendSnapshot>("tempo_set_config", { config }).then(applySnapshot).catch(() => undefined);
   };
   const toggleSound = () => { if (!state.soundEnabled) prepareAudioContext(); updateConfig({ soundEnabled: !state.soundEnabled }); };
   const toggleAutoAdvance = () => updateConfig({ autoAdvance: !state.autoAdvance });
+  const toggleAutoStart = () => updateConfig({ startOnLogin: !state.startOnLogin });
 
   const durationsInMinutes = {
     focus: Math.round(state.durations.focus / 60),
@@ -231,6 +234,7 @@ export function usePomodoroPreview() {
     toggleSettings,
     toggleSound,
     toggleAutoAdvance,
+    toggleAutoStart,
     updateDuration,
     durationsInMinutes,
   };

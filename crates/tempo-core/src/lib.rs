@@ -58,6 +58,8 @@ pub struct PomodoroConfig {
     pub sessions_before_long_break: u32,
     pub auto_advance: bool,
     pub sound_enabled: bool,
+    #[serde(default)]
+    pub start_on_login: bool,
 }
 
 impl Default for PomodoroConfig {
@@ -67,6 +69,7 @@ impl Default for PomodoroConfig {
             sessions_before_long_break: 4,
             auto_advance: true,
             sound_enabled: true,
+            start_on_login: false,
         }
     }
 }

@@ -5,6 +5,7 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
+use tauri_plugin_autostart::ManagerExt;
 use tempo_core::{Mode, PomodoroConfig, PomodoroState, Snapshot};
 
 use tauri::{
@@ -228,11 +229,35 @@ fn tempo_set_config(
         .config
         .lock()
         .map_err(|_| "tempo config poisoned".to_string())?;
+    let previous_timer = timer.clone();
+    let previous = value.clone();
     *value = config.clone();
+
     let now = now_ms();
     timer.complete_if_elapsed(&config, now);
     timer.advance_if_ready(&config, now);
-    persist_tempo(&app, &timer, &config)?;
+    if let Err(error) = persist_tempo(&app, &timer, &config) {
+        *timer = previous_timer;
+        *value = previous;
+        return Err(error);
+    }
+
+    let autolaunch = app.autolaunch();
+    let autolaunch_result = if config.start_on_login {
+        autolaunch.enable()
+    } else {
+        autolaunch.disable()
+    };
+    if let Err(error) = autolaunch_result {
+        *timer = previous_timer;
+        *value = previous.clone();
+        if let Err(rollback_error) = persist_tempo(&app, &timer, &previous) {
+            return Err(format!(
+                "{error}; failed to rollback persisted config: {rollback_error}"
+            ));
+        }
+        return Err(error.to_string());
+    }
     Ok(timer.snapshot(&config, now))
 }
 
@@ -358,6 +383,10 @@ pub fn run() {
         .manage(TrayInteraction::default())
         .manage(TempoState::default())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .plugin(tauri_plugin_notification::init())
         .invoke_handler(tauri::generate_handler![
             play_completion_sound,
@@ -396,6 +425,12 @@ pub fn run() {
                     .config
                     .lock()
                     .map_err(|_| std::io::Error::other("tempo config poisoned"))?;
+                let autolaunch = app.autolaunch();
+                if config.start_on_login {
+                    autolaunch.enable().map_err(std::io::Error::other)?;
+                } else {
+                    autolaunch.disable().map_err(std::io::Error::other)?;
+                }
                 persist_tempo(&app_handle, &timer, &config).map_err(std::io::Error::other)?;
             }
             let open_item = MenuItemBuilder::with_id("open", "Open").build(app)?;
