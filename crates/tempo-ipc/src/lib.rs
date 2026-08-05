@@ -112,20 +112,10 @@ pub mod unix {
     }
 
     fn probe_existing(path: &Path) -> Result<bool, IpcError> {
-        let mut stream = match UnixStream::connect(path) {
-            Ok(stream) => stream,
+        match UnixStream::connect(path) {
+            Ok(_) => Ok(true),
             Err(_) => return Ok(false),
-        };
-        stream.set_write_timeout(Some(std::time::Duration::from_millis(250)))?;
-        let envelope = Envelope {
-            version: PROTOCOL_VERSION,
-            payload: Request::Status,
-        };
-        let _ = writeln!(stream, "{}", serde_json::to_string(&envelope)?);
-
-        // A successful connect means a listener owns the socket. Do not remove it
-        // merely because a busy daemon did not answer within the probe timeout.
-        Ok(true)
+        }
     }
 
     #[cfg(test)]
@@ -139,19 +129,7 @@ pub mod unix {
             let path = std::env::temp_dir().join(format!("tempo-ipc-{}.sock", std::process::id()));
             let _ = std::fs::remove_file(&path);
             let listener = UnixListener::bind(&path).unwrap();
-            let worker = thread::spawn(move || {
-                let (stream, _) = listener.accept().unwrap();
-                let request = read_request(&stream).unwrap();
-                assert!(matches!(request.payload, Request::Status));
-                write_response(
-                    &stream,
-                    Response::success(
-                        tempo_core::PomodoroState::default()
-                            .snapshot(&PomodoroConfig::default(), 0),
-                    ),
-                )
-                .unwrap();
-            });
+            let worker = thread::spawn(move || listener.accept().unwrap());
 
             assert!(matches!(bind(&path), Err(IpcError::AlreadyRunning)));
             worker.join().unwrap();
