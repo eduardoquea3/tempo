@@ -427,9 +427,9 @@ pub fn run() {
                     .map_err(|_| std::io::Error::other("tempo config poisoned"))?;
                 let autolaunch = app.autolaunch();
                 if config.start_on_login {
-                    autolaunch.enable().map_err(std::io::Error::other)?;
-                } else {
-                    autolaunch.disable().map_err(std::io::Error::other)?;
+                    if let Err(error) = autolaunch.enable() {
+                        eprintln!("Tempo could not restore Windows autostart: {error}");
+                    }
                 }
                 persist_tempo(&app_handle, &timer, &config).map_err(std::io::Error::other)?;
             }
