@@ -169,6 +169,17 @@ export function usePomodoroPreview() {
 
   useEffect(() => { void refresh(); const interval = window.setInterval(() => void refresh(), 250); return () => window.clearInterval(interval); }, []);
 
+  useEffect(() => {
+    const closeSettingsOnBlur = () => {
+      setState((current) => current.settingsOpen
+        ? { ...current, settingsOpen: false }
+        : current);
+    };
+
+    window.addEventListener("blur", closeSettingsOnBlur);
+    return () => window.removeEventListener("blur", closeSettingsOnBlur);
+  }, []);
+
   useEffect(() => () => { const audioContext = audioContextRef.current; if (audioContext && audioContext.state !== "closed") void audioContext.close(); }, []);
 
   const progress = useMemo(() => getProgress(state), [state]);
