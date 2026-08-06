@@ -176,8 +176,11 @@ impl PomodoroState {
             return;
         }
 
+        let completed_mode = self.mode;
         self.mode = next_mode(self.mode, self.session, config.sessions_before_long_break);
-        if self.mode == Mode::Focus {
+        if completed_mode == Mode::LongBreak {
+            self.session = 1;
+        } else if self.mode == Mode::Focus {
             self.session = self.session.saturating_add(1);
         }
         self.status = Status::Running;
@@ -193,6 +196,9 @@ impl PomodoroState {
         if self.status == Status::Completed {
             self.elapsed_before_start_ms = 0;
             self.completed_at_ms = None;
+            if self.mode == Mode::LongBreak {
+                self.session = 1;
+            }
         }
         self.status = Status::Running;
         self.started_at_ms = Some(now_ms);
@@ -216,6 +222,9 @@ impl PomodoroState {
         if self.status == Status::Completed {
             self.elapsed_before_start_ms = 0;
             self.completed_at_ms = None;
+            if self.mode == Mode::LongBreak {
+                self.session = 1;
+            }
         }
         self.status = Status::Running;
         self.started_at_ms = Some(now_ms);
@@ -229,8 +238,11 @@ impl PomodoroState {
         }
     }
     pub fn skip(&mut self, config: &PomodoroConfig) {
+        let completed_mode = self.mode;
         self.mode = next_mode(self.mode, self.session, config.sessions_before_long_break);
-        if self.mode == Mode::Focus {
+        if completed_mode == Mode::LongBreak {
+            self.session = 1;
+        } else if self.mode == Mode::Focus {
             self.session = self.session.saturating_add(1);
         }
         self.reset_clock(Status::Idle);
@@ -382,5 +394,38 @@ mod tests {
             state.remaining_seconds_at(&config, DEFAULT_FOCUS_SECONDS * 1000 + 1),
             DEFAULT_FOCUS_SECONDS
         );
+    }
+
+    #[test]
+    fn long_break_resets_session_for_the_next_cycle() {
+        let mut state = PomodoroState {
+            mode: Mode::LongBreak,
+            session: 4,
+            status: Status::Completed,
+            completed_at_ms: Some(0),
+            ..PomodoroState::default()
+        };
+        let config = PomodoroConfig::default();
+
+        state.advance_if_ready(&config, COMPLETION_GRACE_MS);
+
+        assert_eq!(state.mode, Mode::Focus);
+        assert_eq!(state.session, 1);
+        assert_eq!(state.status, Status::Running);
+    }
+
+    #[test]
+    fn skipping_long_break_resets_session_for_the_next_cycle() {
+        let mut state = PomodoroState {
+            mode: Mode::LongBreak,
+            session: 4,
+            ..PomodoroState::default()
+        };
+        let config = PomodoroConfig::default();
+
+        state.skip(&config);
+
+        assert_eq!(state.mode, Mode::Focus);
+        assert_eq!(state.session, 1);
     }
 }
