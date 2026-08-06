@@ -314,13 +314,9 @@ export function PomodoroWidget() {
              </motion.div>
           </section>
 
-          <div className="session-stack">
-            <div className="session-stack__meta">
-              <span>Sesión {state.session}</span>
-              <span>Long break en {state.sessionsBeforeLongBreak}</span>
-            </div>
-            <SessionDots activeIndex={state.session - 1} total={state.sessionsBeforeLongBreak} />
-          </div>
+           <div className="session-stack">
+             <SessionDots activeIndex={state.session - 1} total={state.sessionsBeforeLongBreak} />
+           </div>
 
           <div className="control-bar">
             <button className="action action--primary" type="button" onClick={pomodoro.toggleStatus}>
