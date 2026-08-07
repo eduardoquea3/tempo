@@ -6,6 +6,7 @@ import {
 } from "@tauri-apps/plugin-notification";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
+import { type TranslationKey, t } from "@/lib/i18n";
 
 export type PomodoroMode = "focus" | "shortBreak" | "longBreak";
 export type PomodoroStatus = "idle" | "running" | "paused" | "completed";
@@ -30,19 +31,19 @@ const defaultDurations: Record<PomodoroMode, number> = {
 	longBreak: 15 * 60,
 };
 
+const modeLabelKeys: Record<PomodoroMode, TranslationKey> = {
+	focus: "timer.mode.focus",
+	shortBreak: "timer.mode.shortBreak",
+	longBreak: "timer.mode.longBreak",
+};
+
+const modeSubtitleKeys: Record<PomodoroMode, TranslationKey> = {
+	focus: "timer.mode.focusSubtitle",
+	shortBreak: "timer.mode.shortBreakSubtitle",
+	longBreak: "timer.mode.longBreakSubtitle",
+};
+
 export const durationMinutesSchema = z.number().int().min(1).max(180);
-const modeLabels: Record<PomodoroMode, string> = {
-	focus: "Focus",
-	shortBreak: "Short break",
-	longBreak: "Long break",
-};
-
-const modeSubtitles: Record<PomodoroMode, string> = {
-	focus: "Bloque de trabajo corto, claro y sin fricción.",
-	shortBreak: "Descanso breve para volver con ritmo.",
-	longBreak: "Pausa más larga para cerrar el ciclo.",
-};
-
 export function formatClock(totalSeconds: number) {
 	const safe = Math.max(0, Math.ceil(totalSeconds));
 	const minutes = String(Math.floor(safe / 60)).padStart(2, "0");
@@ -51,11 +52,11 @@ export function formatClock(totalSeconds: number) {
 }
 
 export function getModeLabel(mode: PomodoroMode) {
-	return modeLabels[mode];
+	return t(modeLabelKeys[mode]);
 }
 
 export function getModeSubtitle(mode: PomodoroMode) {
-	return modeSubtitles[mode];
+	return t(modeSubtitleKeys[mode]);
 }
 
 export function getNextMode(
@@ -139,8 +140,8 @@ async function sendCompletionNotification(mode: PomodoroMode) {
 
 		if (permissionGranted) {
 			await sendNotification({
-				title: "Tempo",
-				body: `${getModeLabel(mode)} terminó.`,
+				title: t("app.name"),
+				body: t("notification.completed", { mode: getModeLabel(mode) }),
 			});
 		}
 	} catch {
@@ -166,6 +167,7 @@ export function usePomodoroPreview() {
 		status: state.status,
 		mode: state.mode,
 	});
+	const pendingStatusRef = useRef<PomodoroStatus | null>(null);
 	const audioContextRef = useRef<AudioContext | null>(null);
 
 	type BackendSnapshot = {
@@ -185,7 +187,7 @@ export function usePomodoroPreview() {
 			setState((current) => ({
 				...current,
 				mode: snapshot.state.mode,
-				status: snapshot.state.status,
+				status: pendingStatusRef.current ?? snapshot.state.status,
 				session: snapshot.state.session,
 				durationSeconds: snapshot.durationSeconds,
 				remainingSeconds: snapshot.remainingSeconds,
@@ -284,7 +286,20 @@ export function usePomodoroPreview() {
 			.catch(() => undefined);
 	const toggleStatus = () => {
 		if (state.status !== "running" && state.soundEnabled) prepareAudioContext();
-		run("tempo_toggle");
+		const nextStatus = state.status === "running" ? "paused" : "running";
+		pendingStatusRef.current = nextStatus;
+		setState((current) => ({
+			...current,
+			status: nextStatus,
+		}));
+		void invoke<BackendSnapshot>("tempo_toggle")
+			.then((snapshot) => {
+				pendingStatusRef.current = null;
+				applySnapshot(snapshot);
+			})
+			.catch(() => {
+				pendingStatusRef.current = null;
+			});
 	};
 	const reset = () => run("tempo_reset");
 	const skip = () => run("tempo_skip");
