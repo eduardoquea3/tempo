@@ -54,11 +54,11 @@ export function PomodoroWidget() {
 	return (
 		<main className="grid h-full w-full place-items-stretch">
 			<section
-				className="relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-[26px] border border-white/10 bg-linear-to-b from-[#241f1b] to-[#1d1a17] shadow-[0_26px_60px_rgba(0,0,0,.44),inset_0_1px_0_rgba(255,255,255,.05)] backdrop-blur-[14px]"
+				className="relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-[26px] border border-border bg-linear-to-b from-card to-background shadow-[0_26px_60px_rgba(0,0,0,.44),inset_0_1px_0_rgba(255,255,255,.05)] backdrop-blur-[14px]"
 				data-mode={state.mode}
 				data-status={state.status}
 			>
-				<header className="flex shrink-0 items-center justify-between gap-4 border-b border-white/10 bg-white/5 px-4.5 pb-3.5 pt-4">
+				<header className="flex shrink-0 items-center justify-between gap-4 border-b border-border bg-card/50 px-4.5 pb-3.5 pt-4">
 					<div className="flex min-w-0 items-center gap-2.5">
 						<span
 							className="size-4.5 shrink-0 rounded-md bg-linear-to-br from-[#ff8c4a] to-[#ff6f2f] shadow-[0_0_0_1px_rgba(255,140,74,.32)]"
@@ -68,7 +68,7 @@ export function PomodoroWidget() {
 							<div className="text-[15px] font-semibold leading-[1.1] tracking-[-.02em]">
 								{t("app.name")}
 							</div>
-							<div className="text-xs tracking-[.02em] text-[#a79c8f]">
+							<div className="text-xs tracking-[.02em] text-muted-foreground">
 								{t("timer.session", {
 									mode: getModeLabel(state.mode),
 									minutes: Math.round(state.durationSeconds / 60),
@@ -79,7 +79,7 @@ export function PomodoroWidget() {
 
 					<div className="flex items-center gap-2">
 						<button
-							className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-[10px] border border-white/15 bg-white/5 text-[#c7bcaf] transition hover:-translate-y-px hover:bg-white/5 hover:text-[#f5efe6]"
+							className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-[10px] border border-border bg-secondary text-secondary-foreground transition hover:-translate-y-px hover:bg-accent hover:text-accent-foreground"
 							type="button"
 							aria-label={t("timer.settings.open")}
 							aria-expanded={state.settingsOpen}
@@ -126,7 +126,7 @@ export function PomodoroWidget() {
 							className="grid place-items-center py-1"
 							aria-label={t("timer.label")}
 						>
-							<motion.div className="relative grid aspect-square w-62 place-items-center rounded-full bg-[radial-gradient(circle_at_50%_50%,rgba(20,18,16,.97)_0_61%,transparent_61.5%)] shadow-[inset_0_0_0_1px_rgba(255,255,255,.06),0_20px_34px_rgba(0,0,0,.26)] max-[520px]:w-54.5">
+							<motion.div className="relative grid aspect-square w-62 place-items-center rounded-full bg-[radial-gradient(circle_at_50%_50%,color-mix(in_oklch,var(--background)_97%,transparent)_0_61%,transparent_61.5%)] shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--foreground)_6%,transparent),0_20px_34px_rgba(0,0,0,.26)] max-[520px]:w-54.5">
 								<svg
 									className="pointer-events-none absolute inset-0 size-full -rotate-90"
 									viewBox="0 0 100 100"
@@ -154,7 +154,7 @@ export function PomodoroWidget() {
 								</svg>
 								<span className="pointer-events-none absolute inset-5.5 rounded-full border border-white/5" />
 								<div className="z-1 grid gap-2.5 text-center">
-									<div className="text-xs uppercase tracking-[.06em] text-[#a79c8f]">
+									<div className="text-xs uppercase tracking-[.06em] text-muted-foreground">
 										{getModeLabel(state.mode)}
 									</div>
 									<div
@@ -163,7 +163,7 @@ export function PomodoroWidget() {
 									>
 										{formatClock(state.remainingSeconds)}
 									</div>
-									<div className="mx-auto max-w-[22ch] text-[13px] text-[#c7bcaf]">
+									<div className="mx-auto max-w-[22ch] text-[13px] text-muted-foreground">
 										{getModeSubtitle(state.mode)}
 									</div>
 								</div>
@@ -198,7 +198,7 @@ export function PomodoroWidget() {
 							</button>
 
 							<button
-								className="inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 text-xs font-semibold tracking-[.01em] transition hover:-translate-y-px hover:border-white/15 hover:bg-white/5"
+								className="inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-border bg-secondary text-xs font-semibold tracking-[.01em] text-secondary-foreground transition hover:-translate-y-px hover:border-ring hover:bg-accent"
 								type="button"
 								onClick={pomodoro.reset}
 							>
@@ -207,7 +207,7 @@ export function PomodoroWidget() {
 							</button>
 
 							<button
-								className="inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 text-xs font-semibold tracking-[.01em] transition hover:-translate-y-px hover:border-white/15 hover:bg-white/5"
+								className="inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-border bg-secondary text-xs font-semibold tracking-[.01em] text-secondary-foreground transition hover:-translate-y-px hover:border-ring hover:bg-accent"
 								type="button"
 								onClick={pomodoro.skip}
 							>
@@ -230,7 +230,7 @@ export function PomodoroWidget() {
 					</div>
 				</ScrollArea>
 
-				<footer className="flex shrink-0 items-center justify-between gap-3 border-t border-white/10 px-4.5 pb-4.5 pt-3.5 text-xs text-[#a79c8f]">
+				<footer className="flex shrink-0 items-center justify-between gap-3 border-t border-border px-4.5 pb-4.5 pt-3.5 text-xs text-muted-foreground">
 					<div className="inline-flex items-center gap-2">
 						<span
 							className={cn(
