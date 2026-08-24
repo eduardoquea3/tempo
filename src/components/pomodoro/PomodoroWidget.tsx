@@ -54,7 +54,7 @@ export function PomodoroWidget() {
 	return (
 		<main className="grid h-full w-full place-items-stretch">
 			<section
-				className="relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-[26px] border border-border bg-linear-to-b from-card to-background shadow-[0_26px_60px_rgba(0,0,0,.44),inset_0_1px_0_rgba(255,255,255,.05)] backdrop-blur-[14px]"
+				className="relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-[26px] border border-border bg-linear-to-b from-card to-background shadow-[inset_0_1px_0_rgba(255,255,255,.05)] backdrop-blur-[14px]"
 				data-mode={state.mode}
 				data-status={state.status}
 			>
