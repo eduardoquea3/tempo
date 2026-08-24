@@ -23,8 +23,20 @@ export interface PomodoroPreviewState {
 	startOnLogin: boolean;
 	settingsOpen: boolean;
 	durations: Record<PomodoroMode, number>;
+	elapsedBeforeStartMs: number;
+	startedAtMs: number | null;
+	completedAtMs: number | null;
 }
 
+type TimerState = Omit<
+	PomodoroPreviewState,
+	"settingsOpen" | "remainingSeconds" | "durationSeconds"
+> & {
+	settingsOpen: boolean;
+};
+
+const STORAGE_KEY = "tempo-pomodoro";
+const COMPLETION_GRACE_MS = 5_200;
 const defaultDurations: Record<PomodoroMode, number> = {
 	focus: 25 * 60,
 	shortBreak: 5 * 60,
@@ -36,7 +48,6 @@ const modeLabelKeys: Record<PomodoroMode, TranslationKey> = {
 	shortBreak: "timer.mode.shortBreak",
 	longBreak: "timer.mode.longBreak",
 };
-
 const modeSubtitleKeys: Record<PomodoroMode, TranslationKey> = {
 	focus: "timer.mode.focusSubtitle",
 	shortBreak: "timer.mode.shortBreakSubtitle",
@@ -44,31 +55,257 @@ const modeSubtitleKeys: Record<PomodoroMode, TranslationKey> = {
 };
 
 export const durationMinutesSchema = z.number().int().min(1).max(180);
-export function formatClock(totalSeconds: number) {
-	const safe = Math.max(0, Math.ceil(totalSeconds));
-	const minutes = String(Math.floor(safe / 60)).padStart(2, "0");
-	const seconds = String(safe % 60).padStart(2, "0");
-	return `${minutes}:${seconds}`;
+
+function isMode(value: unknown): value is PomodoroMode {
+	return value === "focus" || value === "shortBreak" || value === "longBreak";
 }
 
+function isStatus(value: unknown): value is PomodoroStatus {
+	return (
+		value === "idle" ||
+		value === "running" ||
+		value === "paused" ||
+		value === "completed"
+	);
+}
+
+function positiveInteger(
+	value: unknown,
+	fallback: number,
+	max = Number.MAX_SAFE_INTEGER,
+) {
+	return typeof value === "number" &&
+		Number.isSafeInteger(value) &&
+		value > 0 &&
+		value <= max
+		? value
+		: fallback;
+}
+
+function nonNegativeInteger(value: unknown, fallback: number) {
+	return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
+		? value
+		: fallback;
+}
+
+function timestampOrNull(value: unknown) {
+	return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
+		? value
+		: null;
+}
+
+function defaultTimerState(): TimerState {
+	return {
+		mode: "focus",
+		status: "idle",
+		session: 1,
+		elapsedBeforeStartMs: 0,
+		startedAtMs: null,
+		completedAtMs: null,
+		durations: { ...defaultDurations },
+		sessionsBeforeLongBreak: 4,
+		autoAdvance: true,
+		soundEnabled: true,
+		startOnLogin: false,
+		settingsOpen: false,
+	};
+}
+
+function parseTimerState(raw: unknown, fallback: TimerState): TimerState {
+	if (!raw || typeof raw !== "object") return fallback;
+	const value = raw as Record<string, unknown>;
+	const durations = value.durations as Record<string, unknown> | undefined;
+	return {
+		...fallback,
+		mode: isMode(value.mode) ? value.mode : fallback.mode,
+		status: isStatus(value.status) ? value.status : fallback.status,
+		session: positiveInteger(value.session, fallback.session),
+		elapsedBeforeStartMs: nonNegativeInteger(value.elapsedBeforeStartMs, 0),
+		startedAtMs: timestampOrNull(value.startedAtMs),
+		completedAtMs: timestampOrNull(value.completedAtMs),
+		durations: {
+			focus: positiveInteger(
+				durations?.focus,
+				fallback.durations.focus,
+				180 * 60,
+			),
+			shortBreak: positiveInteger(
+				durations?.shortBreak,
+				fallback.durations.shortBreak,
+				180 * 60,
+			),
+			longBreak: positiveInteger(
+				durations?.longBreak,
+				fallback.durations.longBreak,
+				180 * 60,
+			),
+		},
+		sessionsBeforeLongBreak: positiveInteger(value.sessionsBeforeLongBreak, 4),
+		autoAdvance:
+			typeof value.autoAdvance === "boolean" ? value.autoAdvance : true,
+		soundEnabled:
+			typeof value.soundEnabled === "boolean" ? value.soundEnabled : true,
+		startOnLogin:
+			typeof value.startOnLogin === "boolean" ? value.startOnLogin : false,
+	};
+}
+
+function loadTimerState(): TimerState {
+	const fallback = defaultTimerState();
+	try {
+		const stored = localStorage.getItem(STORAGE_KEY);
+		return stored === null
+			? fallback
+			: parseTimerState(JSON.parse(stored), fallback);
+	} catch {
+		return fallback;
+	}
+}
+
+function normalizeLegacyState(raw: unknown): unknown {
+	if (!raw || typeof raw !== "object") return null;
+	const value = raw as Record<string, unknown>;
+	const legacyState = value.state;
+	const legacyConfig = value.config;
+	if (
+		!legacyState ||
+		typeof legacyState !== "object" ||
+		!legacyConfig ||
+		typeof legacyConfig !== "object"
+	)
+		return null;
+	const state = legacyState as Record<string, unknown>;
+	const config = legacyConfig as Record<string, unknown>;
+	const legacyDurations = config.durations;
+	if (!legacyDurations || typeof legacyDurations !== "object") return null;
+	const durations = legacyDurations as Record<string, unknown>;
+	return {
+		...state,
+		durations: {
+			focus: durations.focusSeconds,
+			shortBreak: durations.shortBreakSeconds,
+			longBreak: durations.longBreakSeconds,
+		},
+		sessionsBeforeLongBreak: config.sessionsBeforeLongBreak,
+		autoAdvance: config.autoAdvance,
+		soundEnabled: config.soundEnabled,
+		startOnLogin: config.startOnLogin,
+	};
+}
+
+function hasStoredTimerState() {
+	try {
+		return localStorage.getItem(STORAGE_KEY) !== null;
+	} catch {
+		return false;
+	}
+}
+
+function persistTimerState(state: TimerState) {
+	try {
+		localStorage.setItem(
+			STORAGE_KEY,
+			JSON.stringify({
+				mode: state.mode,
+				status: state.status,
+				session: state.session,
+				elapsedBeforeStartMs: state.elapsedBeforeStartMs,
+				startedAtMs: state.startedAtMs,
+				completedAtMs: state.completedAtMs,
+				durations: state.durations,
+				sessionsBeforeLongBreak: state.sessionsBeforeLongBreak,
+				autoAdvance: state.autoAdvance,
+				soundEnabled: state.soundEnabled,
+				startOnLogin: state.startOnLogin,
+			}),
+		);
+	} catch {
+		// Storage can be unavailable; timestamp state still keeps the timer correct.
+	}
+}
+
+function durationFor(state: TimerState) {
+	return state.durations[state.mode];
+}
+
+function elapsedAt(state: TimerState, now: number) {
+	return (
+		state.elapsedBeforeStartMs +
+		(state.startedAtMs === null ? 0 : Math.max(0, now - state.startedAtMs))
+	);
+}
+
+function nextMode(
+	mode: PomodoroMode,
+	session: number,
+	beforeLong: number,
+): PomodoroMode {
+	if (mode !== "focus") return "focus";
+	return session % Math.max(1, beforeLong) === 0 ? "longBreak" : "shortBreak";
+}
+
+function evaluate(state: TimerState, now: number): TimerState {
+	const next = { ...state };
+	if (next.status === "running") {
+		const durationMs = durationFor(next) * 1000;
+		const elapsed = elapsedAt(next, now);
+		if (elapsed >= durationMs) {
+			next.status = "completed";
+			next.elapsedBeforeStartMs = durationMs;
+			next.startedAtMs = null;
+			next.completedAtMs = now - (elapsed - durationMs);
+		} else {
+			next.elapsedBeforeStartMs = 0;
+			next.startedAtMs = now - elapsed;
+		}
+	}
+	if (
+		next.autoAdvance &&
+		next.status === "completed" &&
+		next.completedAtMs !== null &&
+		now - next.completedAtMs >= COMPLETION_GRACE_MS
+	) {
+		const completedMode = next.mode;
+		next.mode = nextMode(next.mode, next.session, next.sessionsBeforeLongBreak);
+		if (completedMode === "longBreak") next.session = 1;
+		else if (next.mode === "focus") next.session += 1;
+		next.status = "running";
+		next.elapsedBeforeStartMs = 0;
+		next.startedAtMs = now;
+		next.completedAtMs = null;
+	}
+	return next;
+}
+
+function displayState(state: TimerState, now: number): PomodoroPreviewState {
+	const durationSeconds = durationFor(state);
+	return {
+		...state,
+		durationSeconds,
+		remainingSeconds: Math.max(
+			0,
+			durationSeconds - Math.floor(elapsedAt(state, now) / 1000),
+		),
+	};
+}
+
+export function formatClock(totalSeconds: number) {
+	const safe = Math.max(0, Math.ceil(totalSeconds));
+	return `${String(Math.floor(safe / 60)).padStart(2, "0")}:${String(safe % 60).padStart(2, "0")}`;
+}
 export function getModeLabel(mode: PomodoroMode) {
 	return t(modeLabelKeys[mode]);
 }
-
 export function getModeSubtitle(mode: PomodoroMode) {
 	return t(modeSubtitleKeys[mode]);
 }
-
 export function getNextMode(
 	mode: PomodoroMode,
 	session: number,
 	sessionsBeforeLongBreak: number,
-): PomodoroMode {
-	if (mode === "focus")
-		return session % sessionsBeforeLongBreak === 0 ? "longBreak" : "shortBreak";
-	return "focus";
+) {
+	return nextMode(mode, session, sessionsBeforeLongBreak);
 }
-
 export function getProgress(
 	state: Pick<PomodoroPreviewState, "remainingSeconds" | "durationSeconds">,
 ) {
@@ -86,166 +323,162 @@ export function getProgress(
 
 function playWebCompletionSound(audioContext: AudioContext | null) {
 	if (!audioContext) return;
-
 	const play = () => {
 		try {
 			const oscillator = audioContext.createOscillator();
 			const gain = audioContext.createGain();
 			const now = audioContext.currentTime;
-
 			oscillator.type = "sine";
 			oscillator.frequency.setValueAtTime(880, now);
 			gain.gain.setValueAtTime(0.0001, now);
 			gain.gain.exponentialRampToValueAtTime(0.24, now + 0.01);
 			gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.28);
-
 			oscillator.connect(gain);
 			gain.connect(audioContext.destination);
 			oscillator.start(now);
 			oscillator.stop(now + 0.28);
 		} catch {
-			// Audio may be unavailable in restricted webviews; the timer must keep working.
+			// Audio may be unavailable in restricted webviews.
 		}
 	};
-
-	if (audioContext.state === "suspended") {
+	if (audioContext.state === "suspended")
 		void audioContext
 			.resume()
 			.then(play)
 			.catch(() => undefined);
-		return;
-	}
-
-	try {
-		play();
-	} catch {
-		// Audio may be unavailable in restricted webviews; the timer must keep working.
-	}
-}
-
-async function playCompletionSound(audioContext: AudioContext | null) {
-	try {
-		await invoke("play_completion_sound");
-	} catch {
-		playWebCompletionSound(audioContext);
-	}
+	else play();
 }
 
 async function sendCompletionNotification(mode: PomodoroMode) {
 	try {
-		let permissionGranted = await isPermissionGranted();
-		if (!permissionGranted) {
-			permissionGranted = (await requestPermission()) === "granted";
-		}
-
-		if (permissionGranted) {
+		let granted = await isPermissionGranted();
+		if (!granted) granted = (await requestPermission()) === "granted";
+		if (granted)
 			await sendNotification({
 				title: t("app.name"),
 				body: t("notification.completed", { mode: getModeLabel(mode) }),
 			});
-		}
 	} catch {
-		// Notifications may be unavailable or denied by the operating system.
+		// Notifications may be unavailable or denied.
 	}
 }
 
 export function usePomodoroPreview() {
-	const [state, setState] = useState<PomodoroPreviewState>(() => ({
-		mode: "focus",
-		status: "idle",
-		remainingSeconds: defaultDurations.focus,
-		durationSeconds: defaultDurations.focus,
-		session: 1,
-		sessionsBeforeLongBreak: 4,
-		soundEnabled: true,
-		autoAdvance: true,
-		startOnLogin: false,
-		settingsOpen: false,
-		durations: defaultDurations,
-	}));
-	const previousCompletionState = useRef({
-		status: state.status,
-		mode: state.mode,
-	});
-	const pendingStatusRef = useRef<PomodoroStatus | null>(null);
+	const [timer, setTimer] = useState<TimerState>(loadTimerState);
+	const [hydrated, setHydrated] = useState(hasStoredTimerState);
+	const migrationStarted = useRef(false);
+	const autostartRequest = useRef(0);
+	const [now, setNow] = useState(Date.now);
+	const previousCompletion = useRef({ status: timer.status, mode: timer.mode });
 	const audioContextRef = useRef<AudioContext | null>(null);
 
-	type BackendSnapshot = {
-		state: { mode: PomodoroMode; status: PomodoroStatus; session: number };
-		config: {
-			durations: Record<string, number>;
-			sessionsBeforeLongBreak: number;
-			autoAdvance: boolean;
-			soundEnabled: boolean;
-			startOnLogin: boolean;
-		};
-		durationSeconds: number;
-		remainingSeconds: number;
-	};
-	const applySnapshot = useCallback(
-		(snapshot: BackendSnapshot) =>
-			setState((current) => ({
-				...current,
-				mode: snapshot.state.mode,
-				status: pendingStatusRef.current ?? snapshot.state.status,
-				session: snapshot.state.session,
-				durationSeconds: snapshot.durationSeconds,
-				remainingSeconds: snapshot.remainingSeconds,
-				sessionsBeforeLongBreak: snapshot.config.sessionsBeforeLongBreak,
-				soundEnabled: snapshot.config.soundEnabled,
-				autoAdvance: snapshot.config.autoAdvance,
-				startOnLogin: snapshot.config.startOnLogin,
-				durations: {
-					focus: snapshot.config.durations.focusSeconds,
-					shortBreak: snapshot.config.durations.shortBreakSeconds,
-					longBreak: snapshot.config.durations.longBreakSeconds,
-				},
-			})),
+	const commit = useCallback(
+		(
+			update: (current: TimerState) => TimerState,
+			updateBeforeEvaluation = false,
+		) => {
+			setTimer((current) => {
+				const timestamp = Date.now();
+				const next = updateBeforeEvaluation
+					? evaluate(update(current), timestamp)
+					: evaluate(update(evaluate(current, timestamp)), timestamp);
+				persistTimerState(next);
+				return next;
+			});
+		},
 		[],
 	);
-
-	const refresh = useCallback(async () => {
-		try {
-			applySnapshot(await invoke<BackendSnapshot>("tempo_status"));
-		} catch {
-			/* The web preview has no timer authority. */
-		}
-	}, [applySnapshot]);
 
 	const prepareAudioContext = useCallback(() => {
 		try {
 			if (
 				!audioContextRef.current &&
 				typeof window.AudioContext !== "undefined"
-			) {
+			)
 				audioContextRef.current = new window.AudioContext();
-			}
-
-			const audioContext = audioContextRef.current;
-			if (audioContext?.state === "suspended")
-				void audioContext.resume().catch(() => undefined);
-			return audioContext;
+			if (audioContextRef.current?.state === "suspended")
+				void audioContextRef.current.resume().catch(() => undefined);
+			return audioContextRef.current;
 		} catch {
 			return null;
 		}
 	}, []);
 
 	useEffect(() => {
-		void refresh();
-		const interval = window.setInterval(() => void refresh(), 250);
-		return () => window.clearInterval(interval);
-	}, [refresh]);
+		if (hydrated || migrationStarted.current) return;
+		migrationStarted.current = true;
+		void invoke<unknown>("load_legacy_tempo")
+			.then((legacy) => {
+				const fallback = defaultTimerState();
+				const normalized = normalizeLegacyState(legacy);
+				const next = normalized
+					? parseTimerState(normalized, fallback)
+					: fallback;
+				setTimer(next);
+				persistTimerState(next);
+			})
+			.catch(() => {
+				const fallback = defaultTimerState();
+				setTimer(fallback);
+				persistTimerState(fallback);
+			})
+			.finally(() => {
+				setNow(Date.now());
+				setHydrated(true);
+			});
+	}, [hydrated]);
 
 	useEffect(() => {
-		const closeSettingsOnBlur = () => {
-			setState((current) =>
-				current.settingsOpen ? { ...current, settingsOpen: false } : current,
-			);
-		};
+		if (!hydrated) return;
+		const interval = window.setInterval(() => setNow(Date.now()), 250);
+		return () => window.clearInterval(interval);
+	}, [hydrated]);
 
-		window.addEventListener("blur", closeSettingsOnBlur);
-		return () => window.removeEventListener("blur", closeSettingsOnBlur);
-	}, []);
+	useEffect(() => {
+		if (!hydrated) return;
+		setTimer((current) => {
+			const next = evaluate(current, now);
+			if (JSON.stringify(next) !== JSON.stringify(current))
+				persistTimerState(next);
+			return next;
+		});
+	}, [hydrated, now]);
+
+	useEffect(() => {
+		if (!hydrated) return;
+		let cancelled = false;
+		let retry: number | undefined;
+		const reconcile = () => {
+			void invoke("set_autostart", { enabled: timer.startOnLogin })
+				.then(() => undefined)
+				.catch(() => {
+					if (!cancelled) retry = window.setTimeout(reconcile, 5_000);
+				});
+		};
+		reconcile();
+		return () => {
+			cancelled = true;
+			if (retry !== undefined) window.clearTimeout(retry);
+		};
+	}, [hydrated, timer.startOnLogin]);
+
+	useEffect(() => {
+		const previous = previousCompletion.current;
+		const completedMode =
+			previous.status === "running" && timer.status === "completed"
+				? timer.mode
+				: previous.status === "running" &&
+						timer.status === "running" &&
+						previous.mode !== timer.mode
+					? previous.mode
+					: null;
+		if (completedMode !== null) {
+			void invoke("tempo_show").catch(() => undefined);
+			if (timer.soundEnabled) playWebCompletionSound(prepareAudioContext());
+			void sendCompletionNotification(completedMode);
+		}
+		previousCompletion.current = { status: timer.status, mode: timer.mode };
+	}, [prepareAudioContext, timer.mode, timer.soundEnabled, timer.status]);
 
 	useEffect(
 		() => () => {
@@ -256,86 +489,90 @@ export function usePomodoroPreview() {
 		[],
 	);
 
+	const state = displayState(timer, now);
 	const progress = useMemo(() => getProgress(state), [state]);
-
-	useEffect(() => {
-		const previous = previousCompletionState.current;
-		const completed =
-			previous.status === "running" && state.status === "completed";
-
-		if (completed) {
-			const completedMode =
-				state.status === "completed" ? state.mode : previous.mode;
-			void invoke("tempo_show").catch(() => undefined);
-			if (state.soundEnabled) void playCompletionSound(prepareAudioContext());
-			void sendCompletionNotification(completedMode);
-		}
-		previousCompletionState.current = {
-			status: state.status,
-			mode: state.mode,
-		};
-	}, [prepareAudioContext, state.mode, state.soundEnabled, state.status]);
-
-	const run = (command: string) =>
-		void invoke<BackendSnapshot>(command)
-			.then(applySnapshot)
-			.catch(() => undefined);
-	const selectMode = (mode: PomodoroMode) =>
-		void invoke<BackendSnapshot>("tempo_set_mode", { mode })
-			.then(applySnapshot)
-			.catch(() => undefined);
+	const selectMode = (mode: PomodoroMode) => {
+		if (!hydrated) return;
+		commit((current) => ({
+			...current,
+			mode,
+			status: "idle",
+			elapsedBeforeStartMs: 0,
+			startedAtMs: null,
+			completedAtMs: null,
+		}));
+	};
 	const toggleStatus = () => {
-		if (state.status !== "running" && state.soundEnabled) prepareAudioContext();
-		const nextStatus = state.status === "running" ? "paused" : "running";
-		pendingStatusRef.current = nextStatus;
-		setState((current) => ({
-			...current,
-			status: nextStatus,
-		}));
-		void invoke<BackendSnapshot>("tempo_toggle")
-			.then((snapshot) => {
-				pendingStatusRef.current = null;
-				applySnapshot(snapshot);
-			})
-			.catch(() => {
-				pendingStatusRef.current = null;
-			});
+		if (!hydrated) return;
+		if (timer.status !== "running" && timer.soundEnabled) prepareAudioContext();
+		commit((current) => {
+			const now = Date.now();
+			if (current.status === "running")
+				return {
+					...current,
+					status: "paused",
+					elapsedBeforeStartMs: elapsedAt(current, now),
+					startedAtMs: null,
+				};
+			const reset =
+				current.status === "completed"
+					? {
+							...current,
+							elapsedBeforeStartMs: 0,
+							completedAtMs: null,
+							session: current.mode === "longBreak" ? 1 : current.session,
+						}
+					: current;
+			return { ...reset, status: "running", startedAtMs: now };
+		});
 	};
-	const reset = () => run("tempo_reset");
-	const skip = () => run("tempo_skip");
-
+	const reset = () => {
+		if (!hydrated) return;
+		commit((current) => ({
+			...current,
+			status: "idle",
+			elapsedBeforeStartMs: 0,
+			startedAtMs: null,
+			completedAtMs: null,
+		}));
+	};
+	const stop = reset;
+	const skip = () => {
+		if (!hydrated) return;
+		commit((current) => {
+			const mode = nextMode(
+				current.mode,
+				current.session,
+				current.sessionsBeforeLongBreak,
+			);
+			return {
+				...current,
+				mode,
+				session:
+					current.mode === "longBreak"
+						? 1
+						: mode === "focus"
+							? current.session + 1
+							: current.session,
+				status: "idle",
+				elapsedBeforeStartMs: 0,
+				startedAtMs: null,
+				completedAtMs: null,
+			};
+		});
+	};
 	const updateDuration = (mode: PomodoroMode, minutes: number) => {
-		const parsedMinutes = durationMinutesSchema.safeParse(minutes);
-		if (!parsedMinutes.success) return;
-
-		const nextDuration = parsedMinutes.data * 60;
-
-		const durations = { ...state.durations, [mode]: nextDuration };
-		const config = {
-			durations: {
-				focusSeconds: durations.focus,
-				shortBreakSeconds: durations.shortBreak,
-				longBreakSeconds: durations.longBreak,
-			},
-			sessionsBeforeLongBreak: state.sessionsBeforeLongBreak,
-			autoAdvance: state.autoAdvance,
-			soundEnabled: state.soundEnabled,
-			startOnLogin: state.startOnLogin,
-		};
-		void invoke<BackendSnapshot>("tempo_set_config", { config })
-			.then(applySnapshot)
-			.catch(() => undefined);
+		if (!hydrated) return;
+		const parsed = durationMinutesSchema.safeParse(minutes);
+		if (parsed.success)
+			commit(
+				(current) => ({
+					...current,
+					durations: { ...current.durations, [mode]: parsed.data * 60 },
+				}),
+				true,
+			);
 	};
-
-	const stop = () => run("tempo_stop");
-
-	const toggleSettings = () => {
-		setState((current) => ({
-			...current,
-			settingsOpen: !current.settingsOpen,
-		}));
-	};
-
 	const updateConfig = (
 		next: Partial<
 			Pick<
@@ -344,34 +581,45 @@ export function usePomodoroPreview() {
 			>
 		>,
 	) => {
-		const config = {
-			durations: {
-				focusSeconds: state.durations.focus,
-				shortBreakSeconds: state.durations.shortBreak,
-				longBreakSeconds: state.durations.longBreak,
-			},
-			sessionsBeforeLongBreak: state.sessionsBeforeLongBreak,
-			autoAdvance: next.autoAdvance ?? state.autoAdvance,
-			soundEnabled: next.soundEnabled ?? state.soundEnabled,
-			startOnLogin: next.startOnLogin ?? state.startOnLogin,
-		};
-		void invoke<BackendSnapshot>("tempo_set_config", { config })
-			.then(applySnapshot)
-			.catch(() => undefined);
+		if (!hydrated) return;
+		if (next.startOnLogin !== undefined) {
+			const enabled = next.startOnLogin;
+			const request = ++autostartRequest.current;
+			const reconcile = () => {
+				void invoke("set_autostart", { enabled })
+					.then(() => {
+						if (request === autostartRequest.current)
+							commit(
+								(current) => ({ ...current, startOnLogin: enabled }),
+								true,
+							);
+					})
+					.catch(() => {
+						if (request === autostartRequest.current)
+							window.setTimeout(reconcile, 5_000);
+					});
+			};
+			reconcile();
+		}
+		const configWithoutAutostart = { ...next };
+		delete configWithoutAutostart.startOnLogin;
+		if (Object.keys(configWithoutAutostart).length > 0)
+			commit((current) => ({ ...current, ...configWithoutAutostart }), true);
 	};
 	const toggleSound = () => {
-		if (!state.soundEnabled) prepareAudioContext();
-		updateConfig({ soundEnabled: !state.soundEnabled });
+		if (!timer.soundEnabled) prepareAudioContext();
+		updateConfig({ soundEnabled: !timer.soundEnabled });
 	};
 	const toggleAutoAdvance = () =>
-		updateConfig({ autoAdvance: !state.autoAdvance });
+		updateConfig({ autoAdvance: !timer.autoAdvance });
 	const toggleAutoStart = () =>
-		updateConfig({ startOnLogin: !state.startOnLogin });
-
-	const durationsInMinutes = {
-		focus: Math.round(state.durations.focus / 60),
-		shortBreak: Math.round(state.durations.shortBreak / 60),
-		longBreak: Math.round(state.durations.longBreak / 60),
+		updateConfig({ startOnLogin: !timer.startOnLogin });
+	const toggleSettings = () => {
+		if (!hydrated) return;
+		setTimer((current) => ({
+			...current,
+			settingsOpen: !current.settingsOpen,
+		}));
 	};
 
 	return {
@@ -387,6 +635,10 @@ export function usePomodoroPreview() {
 		toggleAutoAdvance,
 		toggleAutoStart,
 		updateDuration,
-		durationsInMinutes,
+		durationsInMinutes: {
+			focus: Math.round(state.durations.focus / 60),
+			shortBreak: Math.round(state.durations.shortBreak / 60),
+			longBreak: Math.round(state.durations.longBreak / 60),
+		},
 	};
 }
