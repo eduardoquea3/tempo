@@ -1,21 +1,22 @@
 import {
 	Bell,
 	BellOff,
+	Check,
+	ChevronLeft,
+	ChevronRight,
 	Clock3,
 	Minus,
-	Moon,
 	Palette,
 	Plus,
 	Repeat2,
 	Slash,
-	Sun,
 	SunMedium,
 	X,
 } from "lucide-react";
 import { type MouseEvent, type ReactNode, useEffect, useState } from "react";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import { useTheme } from "../theme/ThemeProvider";
+import { themes, useTheme } from "../theme/ThemeProvider";
 import {
 	durationMinutesSchema,
 	type PomodoroMode,
@@ -179,6 +180,13 @@ export function SettingsSheet({
 	const { state } = controller;
 	const { theme, setTheme } = useTheme();
 	const [activeTab, setActiveTab] = useState<SettingsTab>("time");
+	const [themePage, setThemePage] = useState(0);
+	const themesPerPage = 6;
+	const themePageCount = Math.ceil(themes.length / themesPerPage);
+	const visibleThemes = themes.slice(
+		themePage * themesPerPage,
+		(themePage + 1) * themesPerPage,
+	);
 
 	if (!settingsMounted) return null;
 
@@ -209,7 +217,7 @@ export function SettingsSheet({
 				/>
 				<header className="flex items-start justify-between gap-4 border-b border-border px-4 pb-3 pt-1">
 					<div>
-						<div className="text-[10px] font-bold uppercase tracking-[.11em] text-[#ff8c4a]">
+						<div className="text-[10px] font-bold uppercase tracking-[.11em] text-brand">
 							{t("settings.eyebrow")}
 						</div>
 						<h2
@@ -310,43 +318,88 @@ export function SettingsSheet({
 							<div className="text-[11px] font-bold uppercase tracking-[.08em] text-muted-foreground">
 								Appearance
 							</div>
-							<div className="flex min-h-[42px] items-center justify-between gap-3">
-								<div className="grid gap-0.5">
-									<div className="text-[13px] font-medium">Theme</div>
-									<div className="text-xs text-muted-foreground">
-										Choose Tempo&apos;s appearance.
-									</div>
+							<fieldset className="grid gap-1.5">
+								<legend className="sr-only">Theme</legend>
+								<div className="grid grid-cols-3 gap-1">
+									{visibleThemes.map(({ id, label, preview }) => (
+										<button
+											key={id}
+											className={cn(
+												"group relative grid cursor-pointer gap-0.5 rounded-lg border border-border bg-card p-0.5 text-left text-[10px] text-muted-foreground transition hover:-translate-y-px hover:border-ring hover:text-foreground",
+												theme === id &&
+													"border-brand bg-background text-foreground shadow-sm",
+											)}
+											type="button"
+											aria-label={`${label} theme`}
+											aria-pressed={theme === id}
+											onClick={() => setTheme(id)}
+										>
+											<span
+												className="relative block h-10 overflow-hidden rounded-md border"
+												style={{
+													backgroundColor: preview.background,
+													borderColor: preview.border,
+												}}
+											>
+												<span
+													className="absolute inset-x-0 top-0 h-2 border-b"
+													style={{
+														backgroundColor: preview.surface,
+														borderColor: preview.border,
+													}}
+												/>
+												<span
+													className="absolute left-2 top-2 h-1 w-7 rounded-full opacity-70"
+													style={{ backgroundColor: preview.foreground }}
+												/>
+												<span
+													className="absolute right-2 top-2 h-1 w-5 rounded-full"
+													style={{ backgroundColor: preview.accent }}
+												/>
+												<span
+													className="absolute inset-x-2 bottom-1.5 h-4 rounded border"
+													style={{
+														backgroundColor: preview.surface,
+														borderColor: preview.border,
+													}}
+												/>
+												{theme === id && (
+													<span className="absolute bottom-1.5 right-1.5 grid size-4 place-items-center rounded-full bg-brand text-primary-foreground">
+														<Check className="size-2.5" strokeWidth={3} />
+													</span>
+												)}
+											</span>
+											<span className="px-1 py-px font-medium">{label}</span>
+										</button>
+									))}
 								</div>
-								<fieldset className="inline-flex rounded-lg border border-border bg-secondary p-0.5">
-									<legend className="sr-only">Theme</legend>
+								<div className="flex items-center justify-between">
 									<button
-										className={cn(
-											"grid size-7 place-items-center rounded-md text-muted-foreground transition",
-											theme === "light" &&
-												"bg-background text-foreground shadow-sm",
-										)}
+										className="grid size-7 place-items-center rounded-md border border-border text-muted-foreground transition hover:border-ring hover:text-foreground disabled:pointer-events-none disabled:opacity-35"
 										type="button"
-										aria-label="Light theme"
-										aria-pressed={theme === "light"}
-										onClick={() => setTheme("light")}
+										aria-label="Previous themes"
+										disabled={themePage === 0}
+										onClick={() => setThemePage((page) => page - 1)}
 									>
-										<Sun className="size-4" />
+										<ChevronLeft className="size-3.5" />
 									</button>
+									<span
+										className="text-[10px] font-medium text-muted-foreground"
+										aria-live="polite"
+									>
+										Page {themePage + 1} of {themePageCount}
+									</span>
 									<button
-										className={cn(
-											"grid size-7 place-items-center rounded-md text-muted-foreground transition",
-											theme === "dark" &&
-												"bg-background text-foreground shadow-sm",
-										)}
+										className="grid size-7 place-items-center rounded-md border border-border text-muted-foreground transition hover:border-ring hover:text-foreground disabled:pointer-events-none disabled:opacity-35"
 										type="button"
-										aria-label="Dark theme"
-										aria-pressed={theme === "dark"}
-										onClick={() => setTheme("dark")}
+										aria-label="Next themes"
+										disabled={themePage === themePageCount - 1}
+										onClick={() => setThemePage((page) => page + 1)}
 									>
-										<Moon className="size-4" />
+										<ChevronRight className="size-3.5" />
 									</button>
-								</fieldset>
-							</div>
+								</div>
+							</fieldset>
 						</div>
 					)}
 

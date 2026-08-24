@@ -32,8 +32,8 @@ function SessionDots({
 					className={cn(
 						"h-2.5 w-2.5 rounded-full border",
 						index <= activeIndex
-							? "border-[#ff8c4a]/40 bg-[#ff8c4a] shadow-[0_0_0_4px_rgba(255,140,74,.12)]"
-							: "border-white/15 bg-white/5",
+							? "border-brand/40 bg-brand shadow-[0_0_0_4px_color-mix(in_oklch,var(--brand)_12%,transparent)]"
+							: "border-border bg-muted/40",
 					)}
 					aria-hidden="true"
 				/>
@@ -61,9 +61,11 @@ export function PomodoroWidget() {
 				<header className="flex shrink-0 items-center justify-between gap-4 border-b border-border bg-card/50 px-4.5 pb-3.5 pt-4">
 					<div className="flex min-w-0 items-center gap-2.5">
 						<span
-							className="size-4.5 shrink-0 rounded-md bg-linear-to-br from-[#ff8c4a] to-[#ff6f2f] shadow-[0_0_0_1px_rgba(255,140,74,.32)]"
+							className="relative grid size-4.5 shrink-0 place-items-start rounded-md bg-app-icon shadow-[0_0_0_1px_color-mix(in_oklch,var(--app-icon)_32%,transparent)]"
 							aria-hidden="true"
-						/>
+						>
+							<span className="mt-0.5 ml-0.5 size-2 rounded-[3px] bg-app-icon-detail" />
+						</span>
 						<div className="grid min-w-0 gap-0.5">
 							<div className="text-[15px] font-semibold leading-[1.1] tracking-[-.02em]">
 								{t("app.name")}
@@ -104,15 +106,15 @@ export function PomodoroWidget() {
 								<button
 									key={mode}
 									className={cn(
-										"inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/5 text-xs font-medium tracking-[.01em] text-[#a79c8f] transition hover:-translate-y-px hover:bg-white/5 hover:text-[#f5efe6]",
-										state.mode === mode && "bg-white/5 text-[#f5efe6]",
+										"inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-xl border border-border bg-muted/40 text-xs font-medium tracking-[.01em] text-muted-foreground transition hover:-translate-y-px hover:bg-accent hover:text-accent-foreground",
+										state.mode === mode && "bg-accent text-accent-foreground",
 									)}
 									type="button"
 									aria-pressed={state.mode === mode}
 									onClick={() => pomodoro.selectMode(mode)}
 								>
 									<span
-										className="text-[11px] leading-none text-[#ff8c4a]"
+										className="text-[11px] leading-none text-brand"
 										aria-hidden="true"
 									>
 										{mode === "focus" ? "◉" : mode === "shortBreak" ? "◌" : "◎"}
@@ -137,7 +139,7 @@ export function PomodoroWidget() {
 										cy="50"
 										r="44"
 										fill="none"
-										stroke="rgba(255,255,255,.07)"
+										stroke="var(--border)"
 										strokeWidth="6"
 									/>
 									<circle
@@ -145,14 +147,14 @@ export function PomodoroWidget() {
 										cy="50"
 										r="44"
 										fill="none"
-										stroke="#ff8c4a"
+										stroke="var(--brand)"
 										strokeLinecap="round"
 										strokeWidth="6"
 										strokeDasharray="276.46"
 										style={{ strokeDashoffset: progressOffset }}
 									/>
 								</svg>
-								<span className="pointer-events-none absolute inset-5.5 rounded-full border border-white/5" />
+								<span className="pointer-events-none absolute inset-5.5 rounded-full border border-border/50" />
 								<div className="z-1 grid gap-2.5 text-center">
 									<div className="text-xs uppercase tracking-[.06em] text-muted-foreground">
 										{getModeLabel(state.mode)}
@@ -179,7 +181,7 @@ export function PomodoroWidget() {
 
 						<div className="mt-auto grid grid-cols-2 gap-2">
 							<button
-								className="inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#ff8c4a] text-xs font-semibold tracking-[.01em] text-[#1b120d] shadow-[0_10px_22px_rgba(255,140,74,.2)] transition hover:-translate-y-px hover:bg-[#ff9a61]"
+								className="inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-brand text-xs font-semibold tracking-[.01em] text-primary-foreground shadow-[0_10px_22px_color-mix(in_oklch,var(--brand)_20%,transparent)] transition hover:-translate-y-px hover:bg-primary"
 								type="button"
 								onClick={pomodoro.toggleStatus}
 							>
@@ -216,7 +218,7 @@ export function PomodoroWidget() {
 							</button>
 
 							<button
-								className="inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 text-xs font-semibold tracking-[.01em] text-[#f0b0b0] transition hover:-translate-y-px hover:border-[#e46d6d]/35 hover:bg-[#e46d6d]/10 hover:text-[#ffd5d5]"
+								className="inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-destructive/35 bg-destructive/10 text-xs font-semibold tracking-[.01em] text-destructive transition hover:-translate-y-px hover:border-destructive/55 hover:bg-destructive/15 hover:text-destructive-foreground"
 								type="button"
 								onClick={pomodoro.stop}
 							>
@@ -234,7 +236,7 @@ export function PomodoroWidget() {
 					<div className="inline-flex items-center gap-2">
 						<span
 							className={cn(
-								"size-2 rounded-full bg-[#68c28d] shadow-[0_0_0_4px_rgba(104,194,141,.12)]",
+								"size-2 rounded-full bg-primary shadow-[0_0_0_4px_color-mix(in_oklch,var(--primary)_12%,transparent)]",
 								state.status === "running" &&
 									"animate-[pulse_1.8s_ease-in-out_infinite]",
 							)}
@@ -252,7 +254,7 @@ export function PomodoroWidget() {
 					</div>
 
 					<div className="inline-flex items-center gap-2">
-						<span className="rounded-lg border border-white/10 bg-white/5 px-2 py-0.5 font-mono text-xs tracking-[.02em] text-[#f5efe6]">
+						<span className="rounded-lg border border-border bg-muted/40 px-2 py-0.5 font-mono text-xs tracking-[.02em] text-foreground">
 							{t("timer.shortcut.space")}
 						</span>
 						<span>{t("timer.shortcut.play")}</span>
