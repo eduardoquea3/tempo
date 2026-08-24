@@ -203,7 +203,7 @@ export function SettingsSheet({
 		>
 			<section
 				className={cn(
-					"h-[60%] min-h-0 w-full max-w-[420px] rounded-[20px] border border-border bg-linear-to-b from-card to-background shadow-[0_24px_50px_rgba(0,0,0,.42),inset_0_1px_0_rgba(255,255,255,.06)] animate-[settings-sheet-in_220ms_cubic-bezier(.22,1,.36,1)_both] max-[520px]:rounded-[18px]",
+					"flex h-[60%] min-h-0 w-full max-w-[420px] flex-col rounded-[20px] border border-border bg-linear-to-b from-card to-background shadow-[0_24px_50px_rgba(0,0,0,.42),inset_0_1px_0_rgba(255,255,255,.06)] animate-[settings-sheet-in_220ms_cubic-bezier(.22,1,.36,1)_both] max-[520px]:rounded-[18px]",
 					!state.settingsOpen &&
 						"animate-[settings-sheet-out_220ms_cubic-bezier(.4,0,1,1)_both]",
 				)}
@@ -237,7 +237,7 @@ export function SettingsSheet({
 					</button>
 				</header>
 
-				<div className="grid gap-3 px-4 pb-4 pt-2.5">
+				<div className="flex min-h-0 flex-1 flex-col gap-3 px-4 pb-4 pt-2.5">
 					<div
 						className="grid grid-cols-3 rounded-lg border border-border bg-secondary p-0.5"
 						role="tablist"
@@ -310,7 +310,7 @@ export function SettingsSheet({
 
 					{activeTab === "appearance" && (
 						<div
-							className="grid gap-3"
+							className="flex min-h-0 flex-1 flex-col gap-3"
 							id="settings-panel-appearance"
 							role="tabpanel"
 							aria-labelledby="settings-tab-appearance"
@@ -318,9 +318,9 @@ export function SettingsSheet({
 							<div className="text-[11px] font-bold uppercase tracking-[.08em] text-muted-foreground">
 								Appearance
 							</div>
-							<fieldset className="grid gap-1.5">
+							<fieldset className="flex min-h-0 flex-1 flex-col gap-1.5">
 								<legend className="sr-only">Theme</legend>
-								<div className="grid grid-cols-3 gap-1">
+								<div className="grid min-h-[148px] grid-cols-3 grid-rows-2 gap-1">
 									{visibleThemes.map(({ id, label, preview }) => (
 										<button
 											key={id}
@@ -373,7 +373,7 @@ export function SettingsSheet({
 										</button>
 									))}
 								</div>
-								<div className="flex items-center justify-between">
+								<div className="mt-auto flex items-center justify-between">
 									<button
 										className="grid size-7 place-items-center rounded-md border border-border text-muted-foreground transition hover:border-ring hover:text-foreground disabled:pointer-events-none disabled:opacity-35"
 										type="button"
