@@ -14,12 +14,12 @@ jobs:
           node-version: 22
       - uses: dtolnay/rust-toolchain@stable
       - run: npm ci
-      - run: cargo test --workspace
+      - run: cargo test --manifest-path src-tauri/Cargo.toml
       - run: npm run build
       - run: npm run tauri build -- --bundles msi,nsis
       - uses: actions/upload-artifact@v4
         with:
           name: tempo-windows-installers
           path: |
-            target/release/bundle/**/*.msi
-            target/release/bundle/**/*.exe
+            src-tauri/target/release/bundle/**/*.msi
+            src-tauri/target/release/bundle/**/*.exe
