@@ -1,5 +1,4 @@
 import { SlidersHorizontal } from "lucide-react";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { t } from "@/lib/i18n";
 import { getModeLabel } from "./pomodoroPreview";
 import { SettingsSheet } from "./SettingsSheet";
@@ -62,8 +61,8 @@ export function PomodoroWidget() {
 					</div>
 				</header>
 
-				<ScrollArea className="relative h-0 min-h-0 flex-1 overflow-hidden px-4.5">
-					<div className="flex min-h-full flex-col gap-4 pb-1 pt-5">
+				<div className="relative flex h-0 min-h-0 flex-1 overflow-hidden px-4.5">
+					<div className="flex min-h-full w-full flex-col gap-2 pb-0 pt-5">
 						<TimerModes
 							activeMode={state.mode}
 							onSelect={pomodoro.selectMode}
@@ -75,17 +74,28 @@ export function PomodoroWidget() {
 							progressOffset={progressOffset}
 							activeSession={state.session}
 							totalSessions={state.sessionsBeforeLongBreak}
-						/>
-
-						<TimerActions
-							status={state.status}
-							onToggleStatus={pomodoro.toggleStatus}
-							onReset={pomodoro.reset}
-							onSkip={pomodoro.skip}
-							onStop={pomodoro.stop}
-						/>
+						>
+							<div className="grid gap-2 py-5">
+								<TimerActions
+									row="primary"
+									status={state.status}
+									onToggleStatus={pomodoro.toggleStatus}
+									onReset={pomodoro.reset}
+									onSkip={pomodoro.skip}
+									onStop={pomodoro.stop}
+								/>
+								<TimerActions
+									row="secondary"
+									status={state.status}
+									onToggleStatus={pomodoro.toggleStatus}
+									onReset={pomodoro.reset}
+									onSkip={pomodoro.skip}
+									onStop={pomodoro.stop}
+								/>
+							</div>
+						</TimerStage>
 					</div>
-				</ScrollArea>
+				</div>
 
 				<TimerFooter mode={state.mode} status={state.status} />
 

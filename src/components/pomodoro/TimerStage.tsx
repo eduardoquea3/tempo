@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { type PomodoroMode } from "./pomodoroPreview";
@@ -38,29 +39,33 @@ export function TimerStage({
 	progressOffset,
 	activeSession,
 	totalSessions,
+	children,
 }: {
 	mode: PomodoroMode;
 	remainingSeconds: number;
 	progressOffset: number;
 	activeSession: number;
 	totalSessions: number;
+	children: ReactNode;
 }) {
 	return (
-		<>
-			<section
-				className="flex min-h-0 flex-1 items-center justify-center py-1"
-				aria-label={t("timer.label")}
-			>
+		<section
+			className="flex min-h-0 flex-1 flex-col gap-2.5 py-1"
+			aria-label={t("timer.label")}
+		>
+			<div className="flex min-h-0 flex-1 items-center justify-center">
 				<TimerDial
 					mode={mode}
 					remainingSeconds={remainingSeconds}
 					progressOffset={progressOffset}
 				/>
-			</section>
+			</div>
 
-			<div className="grid gap-2.5">
+			<div>
 				<SessionDots activeIndex={activeSession - 1} total={totalSessions} />
 			</div>
-		</>
+
+			{children}
+		</section>
 	);
 }
