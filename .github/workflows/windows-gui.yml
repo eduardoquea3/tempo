@@ -21,5 +21,5 @@ jobs:
         with:
           name: tempo-windows-installers
           path: |
-            src-tauri/target/release/bundle/**/*.msi
-            src-tauri/target/release/bundle/**/*.exe
+            target/release/bundle/**/*.msi
+            target/release/bundle/**/*.exe
