@@ -31,6 +31,8 @@
 	"settings.durationAria": "{label} en minutos",
 	"settings.sound.label": "Sonido al terminar",
 	"settings.sound.hint": "Un beep suave al completar el ciclo.",
+	"settings.sound.selectLabel": "Sonido de finalización",
+	"settings.sound.preview": "Probar sonido",
 	"settings.autoNext.label": "Siguiente automático",
 	"settings.autoNext.hint": "Pasa al siguiente modo sin abrir otra ventana.",
 	"settings.startOnLogin.label": "Iniciar con Windows",

@@ -11,12 +11,14 @@ import {
 	Repeat2,
 	Slash,
 	SunMedium,
+	Volume2,
 	X,
 } from "lucide-react";
 import { type MouseEvent, type ReactNode, useEffect, useState } from "react";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { themes, useTheme } from "../theme/ThemeProvider";
+import { type CompletionSoundId, completionSounds } from "./completionSounds";
 import {
 	durationMinutesSchema,
 	type PomodoroMode,
@@ -405,7 +407,7 @@ export function SettingsSheet({
 
 					{activeTab === "system" && (
 						<div
-							className="grid gap-1"
+							className="min-h-0 flex-1 overflow-y-auto pr-1 [scrollbar-width:thin]"
 							id="settings-panel-system"
 							role="tabpanel"
 							aria-labelledby="settings-tab-system"
@@ -423,6 +425,39 @@ export function SettingsSheet({
 								pressed={state.soundEnabled}
 								onClick={controller.toggleSound}
 							/>
+							{state.soundEnabled && (
+								<div className="flex items-center justify-between gap-3 pt-1 text-[13px] font-medium">
+									<label className="min-w-0" htmlFor="completion-sound">
+										{t("settings.sound.selectLabel")}
+									</label>
+									<div className="flex min-w-0 items-center gap-1.5">
+										<select
+											id="completion-sound"
+											className="h-8 min-w-0 max-w-[148px] rounded-lg border border-border bg-input px-2.5 text-xs font-normal outline-none transition focus:border-brand/60 focus:ring-2 focus:ring-brand/15"
+											value={state.completionSound}
+											onChange={(event) =>
+												controller.selectCompletionSound(
+													event.target.value as CompletionSoundId,
+												)
+											}
+										>
+											{completionSounds.map((sound) => (
+												<option key={sound.id} value={sound.id}>
+													{sound.label}
+												</option>
+											))}
+										</select>
+										<button
+											className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-lg border border-border bg-secondary text-secondary-foreground transition hover:border-ring hover:bg-accent hover:text-accent-foreground"
+											type="button"
+											aria-label={t("settings.sound.preview")}
+											onClick={controller.previewCompletionSound}
+										>
+											<Volume2 className="size-3.5" strokeWidth={1.85} />
+										</button>
+									</div>
+								</div>
+							)}
 							<TogglePill
 								label={t("settings.autoNext.label")}
 								hint={t("settings.autoNext.hint")}

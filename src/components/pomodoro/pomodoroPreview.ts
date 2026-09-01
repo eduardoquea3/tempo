@@ -7,6 +7,12 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
 import { type TranslationKey, t } from "@/lib/i18n";
+import {
+	type CompletionSoundId,
+	defaultCompletionSound,
+	getCompletionSound,
+	isCompletionSoundId,
+} from "./completionSounds";
 
 export type PomodoroMode = "focus" | "shortBreak" | "longBreak";
 export type PomodoroStatus = "idle" | "running" | "paused" | "completed";
@@ -19,6 +25,7 @@ export interface PomodoroPreviewState {
 	session: number;
 	sessionsBeforeLongBreak: number;
 	soundEnabled: boolean;
+	completionSound: CompletionSoundId;
 	autoAdvance: boolean;
 	startOnLogin: boolean;
 	settingsOpen: boolean;
@@ -106,6 +113,7 @@ function defaultTimerState(): TimerState {
 		sessionsBeforeLongBreak: 4,
 		autoAdvance: true,
 		soundEnabled: true,
+		completionSound: defaultCompletionSound,
 		startOnLogin: false,
 		settingsOpen: false,
 	};
@@ -145,6 +153,9 @@ function parseTimerState(raw: unknown, fallback: TimerState): TimerState {
 			typeof value.autoAdvance === "boolean" ? value.autoAdvance : true,
 		soundEnabled:
 			typeof value.soundEnabled === "boolean" ? value.soundEnabled : true,
+		completionSound: isCompletionSoundId(value.completionSound)
+			? value.completionSound
+			: fallback.completionSound,
 		startOnLogin:
 			typeof value.startOnLogin === "boolean" ? value.startOnLogin : false,
 	};
@@ -216,6 +227,7 @@ function persistTimerState(state: TimerState) {
 				sessionsBeforeLongBreak: state.sessionsBeforeLongBreak,
 				autoAdvance: state.autoAdvance,
 				soundEnabled: state.soundEnabled,
+				completionSound: state.completionSound,
 				startOnLogin: state.startOnLogin,
 			}),
 		);
@@ -321,34 +333,6 @@ export function getProgress(
 	);
 }
 
-function playWebCompletionSound(audioContext: AudioContext | null) {
-	if (!audioContext) return;
-	const play = () => {
-		try {
-			const oscillator = audioContext.createOscillator();
-			const gain = audioContext.createGain();
-			const now = audioContext.currentTime;
-			oscillator.type = "sine";
-			oscillator.frequency.setValueAtTime(880, now);
-			gain.gain.setValueAtTime(0.0001, now);
-			gain.gain.exponentialRampToValueAtTime(0.24, now + 0.01);
-			gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.28);
-			oscillator.connect(gain);
-			gain.connect(audioContext.destination);
-			oscillator.start(now);
-			oscillator.stop(now + 0.28);
-		} catch {
-			// Audio may be unavailable in restricted webviews.
-		}
-	};
-	if (audioContext.state === "suspended")
-		void audioContext
-			.resume()
-			.then(play)
-			.catch(() => undefined);
-	else play();
-}
-
 async function sendCompletionNotification(mode: PomodoroMode) {
 	try {
 		let granted = await isPermissionGranted();
@@ -370,7 +354,8 @@ export function usePomodoroPreview() {
 	const autostartRequest = useRef(0);
 	const [now, setNow] = useState(Date.now);
 	const previousCompletion = useRef({ status: timer.status, mode: timer.mode });
-	const audioContextRef = useRef<AudioContext | null>(null);
+	const audioRef = useRef<HTMLAudioElement | null>(null);
+	const audioTimeoutRef = useRef<number | null>(null);
 
 	const commit = useCallback(
 		(
@@ -389,19 +374,23 @@ export function usePomodoroPreview() {
 		[],
 	);
 
-	const prepareAudioContext = useCallback(() => {
-		try {
-			if (
-				!audioContextRef.current &&
-				typeof window.AudioContext !== "undefined"
-			)
-				audioContextRef.current = new window.AudioContext();
-			if (audioContextRef.current?.state === "suspended")
-				void audioContextRef.current.resume().catch(() => undefined);
-			return audioContextRef.current;
-		} catch {
-			return null;
-		}
+	const prepareAudio = useCallback((soundId: CompletionSoundId) => {
+		if (!audioRef.current) audioRef.current = new Audio();
+		audioRef.current.src = getCompletionSound(soundId).source;
+		audioRef.current.load();
+	}, []);
+
+	const playCompletionSound = useCallback((soundId: CompletionSoundId) => {
+		if (audioTimeoutRef.current !== null)
+			window.clearTimeout(audioTimeoutRef.current);
+		audioRef.current?.pause();
+		const audio = new Audio(getCompletionSound(soundId).source);
+		audioRef.current = audio;
+		void audio.play().catch(() => undefined);
+		audioTimeoutRef.current = window.setTimeout(() => {
+			audio.pause();
+			audio.currentTime = 0;
+		}, 8_000);
 	}, []);
 
 	useEffect(() => {
@@ -474,17 +463,23 @@ export function usePomodoroPreview() {
 					: null;
 		if (completedMode !== null) {
 			void invoke("tempo_show").catch(() => undefined);
-			if (timer.soundEnabled) playWebCompletionSound(prepareAudioContext());
+			if (timer.soundEnabled) playCompletionSound(timer.completionSound);
 			void sendCompletionNotification(completedMode);
 		}
 		previousCompletion.current = { status: timer.status, mode: timer.mode };
-	}, [prepareAudioContext, timer.mode, timer.soundEnabled, timer.status]);
+	}, [
+		playCompletionSound,
+		timer.completionSound,
+		timer.mode,
+		timer.soundEnabled,
+		timer.status,
+	]);
 
 	useEffect(
 		() => () => {
-			const audioContext = audioContextRef.current;
-			if (audioContext && audioContext.state !== "closed")
-				void audioContext.close();
+			if (audioTimeoutRef.current !== null)
+				window.clearTimeout(audioTimeoutRef.current);
+			audioRef.current?.pause();
 		},
 		[],
 	);
@@ -504,7 +499,8 @@ export function usePomodoroPreview() {
 	};
 	const toggleStatus = () => {
 		if (!hydrated) return;
-		if (timer.status !== "running" && timer.soundEnabled) prepareAudioContext();
+		if (timer.status !== "running" && timer.soundEnabled)
+			prepareAudio(timer.completionSound);
 		commit((current) => {
 			const now = Date.now();
 			if (current.status === "running")
@@ -577,7 +573,7 @@ export function usePomodoroPreview() {
 		next: Partial<
 			Pick<
 				PomodoroPreviewState,
-				"soundEnabled" | "autoAdvance" | "startOnLogin"
+				"soundEnabled" | "completionSound" | "autoAdvance" | "startOnLogin"
 			>
 		>,
 	) => {
@@ -607,9 +603,13 @@ export function usePomodoroPreview() {
 			commit((current) => ({ ...current, ...configWithoutAutostart }), true);
 	};
 	const toggleSound = () => {
-		if (!timer.soundEnabled) prepareAudioContext();
+		if (!timer.soundEnabled) prepareAudio(timer.completionSound);
 		updateConfig({ soundEnabled: !timer.soundEnabled });
 	};
+	const selectCompletionSound = (completionSound: CompletionSoundId) =>
+		updateConfig({ completionSound });
+	const previewCompletionSound = () =>
+		playCompletionSound(timer.completionSound);
 	const toggleAutoAdvance = () =>
 		updateConfig({ autoAdvance: !timer.autoAdvance });
 	const toggleAutoStart = () =>
@@ -632,6 +632,8 @@ export function usePomodoroPreview() {
 		stop,
 		toggleSettings,
 		toggleSound,
+		selectCompletionSound,
+		previewCompletionSound,
 		toggleAutoAdvance,
 		toggleAutoStart,
 		updateDuration,

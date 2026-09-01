@@ -31,6 +31,8 @@
 	"settings.durationAria": "{label} in minutes",
 	"settings.sound.label": "Sound on finish",
 	"settings.sound.hint": "A gentle beep when the cycle completes.",
+	"settings.sound.selectLabel": "Completion sound",
+	"settings.sound.preview": "Preview sound",
 	"settings.autoNext.label": "Auto next",
 	"settings.autoNext.hint": "Move to the next mode without opening another window.",
 	"settings.startOnLogin.label": "Start with Windows",
