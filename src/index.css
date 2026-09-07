@@ -51,6 +51,99 @@
 	--shadow-2xl: 0 1px 3px 0 hsl(0 0% 0% / 0.25);
 }
 
+[data-theme="ayu-light"] {
+	--background: #f8f9fa;
+	--foreground: #5c6166;
+	--card: #fcfcfc;
+	--card-foreground: #5c6166;
+	--popover: #fcfcfc;
+	--popover-foreground: #5c6166;
+	--primary: #f29718;
+	--primary-foreground: #2d333b;
+	--secondary: #ebeef0;
+	--secondary-foreground: #5c6166;
+	--muted: #ebeef0;
+	--muted-foreground: #828e9f;
+	--accent: #ebeef0;
+	--accent-foreground: #5c6166;
+	--destructive: #e65050;
+	--destructive-foreground: #fcfcfc;
+	--border: #828e9f;
+	--input: #ebeef0;
+	--ring: #f29718;
+	--sidebar: #fcfcfc;
+	--sidebar-foreground: #5c6166;
+	--sidebar-primary: #f29718;
+	--sidebar-primary-foreground: #2d333b;
+	--sidebar-accent: #ebeef0;
+	--sidebar-accent-foreground: #5c6166;
+	--sidebar-border: #828e9f;
+	--sidebar-ring: #f29718;
+	--brand: #f29718;
+}
+
+[data-theme="ayu-mirage"] {
+	--background: #1f2430;
+	--foreground: #cccac2;
+	--card: #242936;
+	--card-foreground: #cccac2;
+	--popover: #2a3040;
+	--popover-foreground: #cccac2;
+	--primary: #ffcc66;
+	--primary-foreground: #181c26;
+	--secondary: #242936;
+	--secondary-foreground: #cccac2;
+	--muted: #242936;
+	--muted-foreground: #707a8c;
+	--accent: #2a3040;
+	--accent-foreground: #cccac2;
+	--destructive: #ff6666;
+	--destructive-foreground: #181c26;
+	--border: #707a8c;
+	--input: #181c26;
+	--ring: #ffcc66;
+	--sidebar: #242936;
+	--sidebar-foreground: #cccac2;
+	--sidebar-primary: #ffcc66;
+	--sidebar-primary-foreground: #181c26;
+	--sidebar-accent: #2a3040;
+	--sidebar-accent-foreground: #cccac2;
+	--sidebar-border: #707a8c;
+	--sidebar-ring: #ffcc66;
+	--brand: #ffcc66;
+}
+
+[data-theme="ayu-dark"] {
+	--background: #0d1017;
+	--foreground: #bfbdb6;
+	--card: #10141c;
+	--card-foreground: #bfbdb6;
+	--popover: #151a24;
+	--popover-foreground: #bfbdb6;
+	--primary: #e6b450;
+	--primary-foreground: #0a0000;
+	--secondary: #10141c;
+	--secondary-foreground: #bfbdb6;
+	--muted: #10141c;
+	--muted-foreground: #5a6378;
+	--accent: #151a24;
+	--accent-foreground: #bfbdb6;
+	--destructive: #d95757;
+	--destructive-foreground: #0a0000;
+	--border: #5a6378;
+	--input: #0a0000;
+	--ring: #e6b450;
+	--sidebar: #10141c;
+	--sidebar-foreground: #bfbdb6;
+	--sidebar-primary: #e6b450;
+	--sidebar-primary-foreground: #0a0000;
+	--sidebar-accent: #151a24;
+	--sidebar-accent-foreground: #bfbdb6;
+	--sidebar-border: #5a6378;
+	--sidebar-ring: #e6b450;
+	--brand: #e6b450;
+}
+
 [data-theme="kanso"] {
 	--background: #14171d;
 	--foreground: #c5c9c7;
@@ -401,6 +494,54 @@
 	button:focus-visible {
 		outline: 2px solid color-mix(in oklch, var(--brand) 65%, transparent);
 		outline-offset: 2px;
+	}
+	.volume-range {
+		width: 128px;
+		height: 18px;
+		margin: 0;
+		appearance: none;
+		cursor: pointer;
+		background: transparent;
+		accent-color: var(--brand);
+	}
+	.volume-range::-webkit-slider-runnable-track {
+		height: 4px;
+		border: 1px solid color-mix(in oklch, var(--border) 70%, transparent);
+		border-radius: 999px;
+		background: color-mix(in oklch, var(--input) 78%, var(--border));
+	}
+	.volume-range::-webkit-slider-thumb {
+		width: 14px;
+		height: 14px;
+		margin-top: -6px;
+		appearance: none;
+		border: 2px solid var(--background);
+		border-radius: 50%;
+		background: var(--brand);
+		box-shadow: 0 0 0 1px color-mix(in oklch, var(--brand) 45%, transparent);
+	}
+	.volume-range::-moz-range-track {
+		height: 4px;
+		border: 1px solid color-mix(in oklch, var(--border) 70%, transparent);
+		border-radius: 999px;
+		background: color-mix(in oklch, var(--input) 78%, var(--border));
+	}
+	.volume-range::-moz-range-progress {
+		height: 4px;
+		border-radius: 999px;
+		background: var(--brand);
+	}
+	.volume-range::-moz-range-thumb {
+		width: 10px;
+		height: 10px;
+		border: 2px solid var(--background);
+		border-radius: 50%;
+		background: var(--brand);
+		box-shadow: 0 0 0 1px color-mix(in oklch, var(--brand) 45%, transparent);
+	}
+	.volume-range:focus-visible {
+		outline: 2px solid color-mix(in oklch, var(--brand) 65%, transparent);
+		outline-offset: 3px;
 	}
 	.duration-input {
 		-moz-appearance: textfield;

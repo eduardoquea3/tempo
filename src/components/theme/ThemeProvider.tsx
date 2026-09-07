@@ -7,6 +7,9 @@ import {
 } from "react";
 
 export type Theme =
+	| "ayu-light"
+	| "ayu-mirage"
+	| "ayu-dark"
 	| "catppuccin-latte"
 	| "catppuccin-frappe"
 	| "catppuccin-macchiato"
@@ -16,6 +19,39 @@ export type Theme =
 	| "one-dark-pro";
 
 export const themes = [
+	{
+		id: "ayu-light",
+		label: "Ayu Light",
+		preview: {
+			background: "#F8F9FA",
+			surface: "#FCFCFC",
+			accent: "#F29718",
+			border: "#828E9F",
+			foreground: "#5C6166",
+		},
+	},
+	{
+		id: "ayu-mirage",
+		label: "Ayu Mirage",
+		preview: {
+			background: "#1F2430",
+			surface: "#242936",
+			accent: "#FFCC66",
+			border: "#707A8C",
+			foreground: "#CCCAC2",
+		},
+	},
+	{
+		id: "ayu-dark",
+		label: "Ayu Dark",
+		preview: {
+			background: "#0D1017",
+			surface: "#10141C",
+			accent: "#E6B450",
+			border: "#5A6378",
+			foreground: "#BFBDB6",
+		},
+	},
 	{
 		id: "catppuccin-latte",
 		label: "Catppuccin Latte",
