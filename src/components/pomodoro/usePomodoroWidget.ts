@@ -60,6 +60,14 @@ export function usePomodoroWidget() {
 	}, [pomodoro, state.settingsOpen]);
 
 	useEffect(() => {
+		if (!state.settingsOpen) return;
+
+		const handleWindowBlur = () => pomodoro.toggleSettings();
+		window.addEventListener("blur", handleWindowBlur);
+		return () => window.removeEventListener("blur", handleWindowBlur);
+	}, [pomodoro, state.settingsOpen]);
+
+	useEffect(() => {
 		const handleKeyDown = (event: KeyboardEvent) => {
 			const target = event.target as HTMLElement;
 			if (

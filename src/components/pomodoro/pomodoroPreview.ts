@@ -26,6 +26,7 @@ export interface PomodoroPreviewState {
 	sessionsBeforeLongBreak: number;
 	soundEnabled: boolean;
 	completionSound: CompletionSoundId;
+	volume: number;
 	autoAdvance: boolean;
 	startOnLogin: boolean;
 	settingsOpen: boolean;
@@ -114,6 +115,7 @@ function defaultTimerState(): TimerState {
 		autoAdvance: true,
 		soundEnabled: true,
 		completionSound: defaultCompletionSound,
+		volume: 1,
 		startOnLogin: false,
 		settingsOpen: false,
 	};
@@ -156,6 +158,10 @@ function parseTimerState(raw: unknown, fallback: TimerState): TimerState {
 		completionSound: isCompletionSoundId(value.completionSound)
 			? value.completionSound
 			: fallback.completionSound,
+		volume:
+			typeof value.volume === "number" && Number.isFinite(value.volume)
+				? Math.max(0, Math.min(1, value.volume))
+				: fallback.volume,
 		startOnLogin:
 			typeof value.startOnLogin === "boolean" ? value.startOnLogin : false,
 	};
@@ -228,6 +234,7 @@ function persistTimerState(state: TimerState) {
 				autoAdvance: state.autoAdvance,
 				soundEnabled: state.soundEnabled,
 				completionSound: state.completionSound,
+				volume: state.volume,
 				startOnLogin: state.startOnLogin,
 			}),
 		);
@@ -356,6 +363,8 @@ export function usePomodoroPreview() {
 	const previousCompletion = useRef({ status: timer.status, mode: timer.mode });
 	const audioRef = useRef<HTMLAudioElement | null>(null);
 	const audioTimeoutRef = useRef<number | null>(null);
+	const audioPlaybackId = useRef(0);
+	const [previewPlaying, setPreviewPlaying] = useState(false);
 
 	const commit = useCallback(
 		(
@@ -374,24 +383,51 @@ export function usePomodoroPreview() {
 		[],
 	);
 
-	const prepareAudio = useCallback((soundId: CompletionSoundId) => {
-		if (!audioRef.current) audioRef.current = new Audio();
-		audioRef.current.src = getCompletionSound(soundId).source;
-		audioRef.current.load();
+	const clearAudio = useCallback(() => {
+		audioPlaybackId.current += 1;
+		if (audioTimeoutRef.current !== null) {
+			window.clearTimeout(audioTimeoutRef.current);
+			audioTimeoutRef.current = null;
+		}
+		if (audioRef.current) {
+			audioRef.current.pause();
+			audioRef.current.currentTime = 0;
+		}
+		setPreviewPlaying(false);
 	}, []);
 
-	const playCompletionSound = useCallback((soundId: CompletionSoundId) => {
-		if (audioTimeoutRef.current !== null)
-			window.clearTimeout(audioTimeoutRef.current);
-		audioRef.current?.pause();
-		const audio = new Audio(getCompletionSound(soundId).source);
-		audioRef.current = audio;
-		void audio.play().catch(() => undefined);
-		audioTimeoutRef.current = window.setTimeout(() => {
-			audio.pause();
-			audio.currentTime = 0;
-		}, 8_000);
-	}, []);
+	const prepareAudio = useCallback(
+		(soundId: CompletionSoundId) => {
+			if (!audioRef.current) audioRef.current = new Audio();
+			clearAudio();
+			audioRef.current.src = getCompletionSound(soundId).source;
+			audioRef.current.volume = timer.volume;
+			audioRef.current.load();
+		},
+		[clearAudio, timer.volume],
+	);
+
+	const playCompletionSound = useCallback(
+		(soundId: CompletionSoundId) => {
+			clearAudio();
+			const playbackId = ++audioPlaybackId.current;
+			const audio = audioRef.current ?? new Audio();
+			audioRef.current = audio;
+			audio.src = getCompletionSound(soundId).source;
+			audio.volume = timer.volume;
+			audio.onended = () => {
+				if (audioPlaybackId.current === playbackId) clearAudio();
+			};
+			audio.load();
+			void audio.play().catch(() => {
+				if (audioPlaybackId.current === playbackId) clearAudio();
+			});
+			audioTimeoutRef.current = window.setTimeout(() => {
+				if (audioPlaybackId.current === playbackId) clearAudio();
+			}, 8_000);
+		},
+		[clearAudio, timer.volume],
+	);
 
 	useEffect(() => {
 		if (hydrated || migrationStarted.current) return;
@@ -477,11 +513,9 @@ export function usePomodoroPreview() {
 
 	useEffect(
 		() => () => {
-			if (audioTimeoutRef.current !== null)
-				window.clearTimeout(audioTimeoutRef.current);
-			audioRef.current?.pause();
+			clearAudio();
 		},
-		[],
+		[clearAudio],
 	);
 
 	const state = displayState(timer, now);
@@ -603,13 +637,28 @@ export function usePomodoroPreview() {
 			commit((current) => ({ ...current, ...configWithoutAutostart }), true);
 	};
 	const toggleSound = () => {
+		if (timer.soundEnabled) clearAudio();
 		if (!timer.soundEnabled) prepareAudio(timer.completionSound);
 		updateConfig({ soundEnabled: !timer.soundEnabled });
 	};
-	const selectCompletionSound = (completionSound: CompletionSoundId) =>
+	const selectCompletionSound = (completionSound: CompletionSoundId) => {
+		if (previewPlaying) clearAudio();
 		updateConfig({ completionSound });
-	const previewCompletionSound = () =>
+	};
+	const togglePreviewCompletionSound = () => {
+		if (previewPlaying) {
+			clearAudio();
+			return;
+		}
 		playCompletionSound(timer.completionSound);
+		setPreviewPlaying(true);
+	};
+	const updateVolume = (volume: number) => {
+		if (!hydrated || !Number.isFinite(volume)) return;
+		const normalized = Math.max(0, Math.min(1, volume));
+		commit((current) => ({ ...current, volume: normalized }));
+		if (audioRef.current) audioRef.current.volume = normalized;
+	};
 	const toggleAutoAdvance = () =>
 		updateConfig({ autoAdvance: !timer.autoAdvance });
 	const toggleAutoStart = () =>
@@ -633,7 +682,9 @@ export function usePomodoroPreview() {
 		toggleSettings,
 		toggleSound,
 		selectCompletionSound,
-		previewCompletionSound,
+		togglePreviewCompletionSound,
+		previewPlaying,
+		updateVolume,
 		toggleAutoAdvance,
 		toggleAutoStart,
 		updateDuration,

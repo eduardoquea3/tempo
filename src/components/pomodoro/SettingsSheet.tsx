@@ -12,10 +12,10 @@ import {
 	Slash,
 	SunMedium,
 	Volume2,
-	X,
+	VolumeX,
 } from "lucide-react";
 import { type MouseEvent, type ReactNode, useEffect, useState } from "react";
-import { t } from "@/lib/i18n";
+import { t, useLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { themes, useTheme } from "../theme/ThemeProvider";
 import { type CompletionSoundId, completionSounds } from "./completionSounds";
@@ -161,9 +161,9 @@ type PomodoroController = ReturnType<typeof usePomodoroPreview>;
 type SettingsTab = "time" | "appearance" | "system";
 
 const settingsTabs = [
-	{ id: "time", label: "Tiempo", icon: Clock3 },
-	{ id: "appearance", label: "Apariencia", icon: Palette },
-	{ id: "system", label: "Sistema", icon: SunMedium },
+	{ id: "time", label: "settings.tab.time", icon: Clock3 },
+	{ id: "appearance", label: "settings.tab.appearance", icon: Palette },
+	{ id: "system", label: "settings.tab.system", icon: SunMedium },
 ] as const satisfies ReadonlyArray<{
 	id: SettingsTab;
 	label: string;
@@ -181,6 +181,7 @@ export function SettingsSheet({
 }) {
 	const { state } = controller;
 	const { theme, setTheme } = useTheme();
+	const { locale, setLocale } = useLocale();
 	const [activeTab, setActiveTab] = useState<SettingsTab>("time");
 	const [themePage, setThemePage] = useState(0);
 	const themesPerPage = 6;
@@ -205,45 +206,20 @@ export function SettingsSheet({
 		>
 			<section
 				className={cn(
-					"flex h-[60%] min-h-0 w-full max-w-[420px] flex-col rounded-[20px] border border-border bg-linear-to-b from-card to-background shadow-[0_24px_50px_rgba(0,0,0,.42),inset_0_1px_0_rgba(255,255,255,.06)] animate-[settings-sheet-in_220ms_cubic-bezier(.22,1,.36,1)_both] max-[520px]:rounded-[18px]",
+					"flex h-[60%] min-h-0 w-full max-w-[420px] flex-col rounded-[20px] border border-border/35 bg-linear-to-b from-card to-background shadow-[0_24px_50px_rgba(0,0,0,.42),inset_0_1px_0_rgba(255,255,255,.06)] animate-[settings-sheet-in_220ms_cubic-bezier(.22,1,.36,1)_both] max-[520px]:rounded-[18px]",
 					!state.settingsOpen &&
 						"animate-[settings-sheet-out_220ms_cubic-bezier(.4,0,1,1)_both]",
 				)}
 				role="dialog"
 				aria-modal="true"
-				aria-labelledby="settings-title"
+				aria-label={t("settings.title")}
+				onMouseDown={(event) => event.stopPropagation()}
 			>
-				<div
-					className="mx-auto my-2 h-1 w-[34px] rounded-full bg-muted-foreground/30"
-					aria-hidden="true"
-				/>
-				<header className="flex items-start justify-between gap-4 border-b border-border px-4 pb-3 pt-1">
-					<div>
-						<div className="text-[10px] font-bold uppercase tracking-[.11em] text-brand">
-							{t("settings.eyebrow")}
-						</div>
-						<h2
-							className="mt-0.5 text-[17px] font-semibold tracking-[-.02em]"
-							id="settings-title"
-						>
-							{t("settings.title")}
-						</h2>
-					</div>
-					<button
-						className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-[10px] border border-border bg-secondary text-secondary-foreground transition hover:-translate-y-px hover:border-ring hover:bg-accent hover:text-accent-foreground"
-						type="button"
-						aria-label={t("settings.close")}
-						onClick={controller.toggleSettings}
-					>
-						<X className="size-4 shrink-0" strokeWidth={1.85} />
-					</button>
-				</header>
-
 				<div className="flex min-h-0 flex-1 flex-col gap-3 px-4 pb-4 pt-2.5">
 					<div
 						className="grid grid-cols-3 rounded-lg border border-border bg-secondary p-0.5"
 						role="tablist"
-						aria-label="Settings sections"
+						aria-label={t("settings.tabs.label")}
 					>
 						{settingsTabs.map(({ id, label, icon: Icon }) => (
 							<button
@@ -261,14 +237,14 @@ export function SettingsSheet({
 								onClick={() => setActiveTab(id)}
 							>
 								<Icon className="size-3.5 shrink-0" strokeWidth={1.85} />
-								<span className="truncate">{label}</span>
+								<span className="truncate">{t(label)}</span>
 							</button>
 						))}
 					</div>
 
 					{activeTab === "time" && (
 						<div
-							className="grid gap-1.5"
+							className="flex min-h-0 flex-1 flex-col gap-3"
 							id="settings-panel-time"
 							role="tabpanel"
 							aria-labelledby="settings-tab-time"
@@ -279,34 +255,36 @@ export function SettingsSheet({
 										{t("settings.duration")}
 									</div>
 									<div className="text-xs text-muted-foreground/70">
-										Set the length of each mode.
+										{t("settings.time.hint")}
 									</div>
 								</div>
 								<span className="text-[10px] font-medium uppercase tracking-[.08em] text-muted-foreground/55">
-									Minutes
+									{t("settings.minutes")}
 								</span>
 							</div>
-							<DurationField
-								mode="focus"
-								label={t("timer.mode.focus")}
-								value={controller.durationsInMinutes.focus}
-								step={5}
-								onChange={controller.updateDuration}
-							/>
-							<DurationField
-								mode="shortBreak"
-								label={t("timer.mode.shortBreak")}
-								value={controller.durationsInMinutes.shortBreak}
-								step={1}
-								onChange={controller.updateDuration}
-							/>
-							<DurationField
-								mode="longBreak"
-								label={t("timer.mode.longBreak")}
-								value={controller.durationsInMinutes.longBreak}
-								step={1}
-								onChange={controller.updateDuration}
-							/>
+							<div className="grid flex-1 content-evenly gap-2">
+								<DurationField
+									mode="focus"
+									label={t("timer.mode.focus")}
+									value={controller.durationsInMinutes.focus}
+									step={5}
+									onChange={controller.updateDuration}
+								/>
+								<DurationField
+									mode="shortBreak"
+									label={t("timer.mode.shortBreak")}
+									value={controller.durationsInMinutes.shortBreak}
+									step={1}
+									onChange={controller.updateDuration}
+								/>
+								<DurationField
+									mode="longBreak"
+									label={t("timer.mode.longBreak")}
+									value={controller.durationsInMinutes.longBreak}
+									step={1}
+									onChange={controller.updateDuration}
+								/>
+							</div>
 						</div>
 					)}
 
@@ -318,26 +296,28 @@ export function SettingsSheet({
 							aria-labelledby="settings-tab-appearance"
 						>
 							<div className="text-[11px] font-bold uppercase tracking-[.08em] text-muted-foreground">
-								Appearance
+								{t("settings.appearance.title")}
 							</div>
-							<fieldset className="flex min-h-0 flex-1 flex-col gap-1.5">
-								<legend className="sr-only">Theme</legend>
-								<div className="grid min-h-[148px] grid-cols-3 grid-rows-2 gap-1">
+							<fieldset className="flex min-h-0 flex-1 flex-col gap-2">
+								<legend className="sr-only">
+									{t("settings.appearance.theme")}
+								</legend>
+								<div className="grid min-h-0 flex-1 grid-cols-3 grid-rows-2 gap-1.5">
 									{visibleThemes.map(({ id, label, preview }) => (
 										<button
 											key={id}
 											className={cn(
-												"group relative grid cursor-pointer gap-0.5 rounded-lg border border-border bg-card p-0.5 text-left text-[10px] text-muted-foreground transition hover:-translate-y-px hover:border-ring hover:text-foreground",
+												"group relative grid min-h-0 cursor-pointer grid-rows-[minmax(0,1fr)_auto] gap-0.5 rounded-lg border border-border bg-card p-0.5 text-left text-[10px] text-muted-foreground transition hover:-translate-y-px hover:border-ring hover:text-foreground",
 												theme === id &&
 													"border-brand bg-background text-foreground shadow-sm",
 											)}
 											type="button"
-											aria-label={`${label} theme`}
+											aria-label={t("settings.theme.label", { label })}
 											aria-pressed={theme === id}
 											onClick={() => setTheme(id)}
 										>
 											<span
-												className="relative block h-10 overflow-hidden rounded-md border"
+												className="relative block h-full min-h-0 overflow-hidden rounded-md border"
 												style={{
 													backgroundColor: preview.background,
 													borderColor: preview.border,
@@ -379,7 +359,7 @@ export function SettingsSheet({
 									<button
 										className="grid size-7 place-items-center rounded-md border border-border text-muted-foreground transition hover:border-ring hover:text-foreground disabled:pointer-events-none disabled:opacity-35"
 										type="button"
-										aria-label="Previous themes"
+										aria-label={t("settings.themes.previous")}
 										disabled={themePage === 0}
 										onClick={() => setThemePage((page) => page - 1)}
 									>
@@ -389,12 +369,15 @@ export function SettingsSheet({
 										className="text-[10px] font-medium text-muted-foreground"
 										aria-live="polite"
 									>
-										Page {themePage + 1} of {themePageCount}
+										{t("settings.themes.page", {
+											current: themePage + 1,
+											total: themePageCount,
+										})}
 									</span>
 									<button
 										className="grid size-7 place-items-center rounded-md border border-border text-muted-foreground transition hover:border-ring hover:text-foreground disabled:pointer-events-none disabled:opacity-35"
 										type="button"
-										aria-label="Next themes"
+										aria-label={t("settings.themes.next")}
 										disabled={themePage === themePageCount - 1}
 										onClick={() => setThemePage((page) => page + 1)}
 									>
@@ -413,7 +396,7 @@ export function SettingsSheet({
 							aria-labelledby="settings-tab-system"
 						>
 							<div className="mb-0.5 text-[11px] font-bold uppercase tracking-[.08em] text-muted-foreground">
-								System behavior
+								{t("settings.system.title")}
 							</div>
 							<TogglePill
 								label={t("settings.sound.label")}
@@ -450,14 +433,64 @@ export function SettingsSheet({
 										<button
 											className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-lg border border-border bg-secondary text-secondary-foreground transition hover:border-ring hover:bg-accent hover:text-accent-foreground"
 											type="button"
-											aria-label={t("settings.sound.preview")}
-											onClick={controller.previewCompletionSound}
+											aria-label={
+												controller.previewPlaying
+													? t("settings.sound.stopPreview")
+													: t("settings.sound.preview")
+											}
+											aria-pressed={controller.previewPlaying}
+											onClick={controller.togglePreviewCompletionSound}
 										>
-											<Volume2 className="size-3.5" strokeWidth={1.85} />
+											{controller.previewPlaying ? (
+												<VolumeX className="size-3.5" strokeWidth={1.85} />
+											) : (
+												<Volume2 className="size-3.5" strokeWidth={1.85} />
+											)}
 										</button>
 									</div>
 								</div>
 							)}
+							{state.soundEnabled && (
+								<div className="flex items-center justify-between gap-3 pt-1 text-[13px] font-medium">
+									<label htmlFor="completion-volume">
+										{t("settings.volume.label")}
+									</label>
+									<div className="flex items-center gap-2">
+										<input
+											id="completion-volume"
+											className="volume-range"
+											type="range"
+											min="0"
+											max="1"
+											step="0.01"
+											value={state.volume}
+											aria-label={t("settings.volume.label")}
+											onChange={(event) =>
+												controller.updateVolume(Number(event.target.value))
+											}
+										/>
+										<span className="w-9 text-right text-xs text-muted-foreground">
+											{t("settings.volume.value", {
+												value: Math.round(state.volume * 100),
+											})}
+										</span>
+									</div>
+								</div>
+							)}
+							<div className="flex items-center justify-between gap-3 pt-1 text-[13px] font-medium">
+								<label htmlFor="language">{t("settings.language.label")}</label>
+								<select
+									id="language"
+									className="h-8 rounded-lg border border-border bg-input px-2.5 text-xs font-normal outline-none transition focus:border-brand/60 focus:ring-2 focus:ring-brand/15"
+									value={locale}
+									onChange={(event) =>
+										setLocale(event.target.value as "es" | "en")
+									}
+								>
+									<option value="es">{t("settings.language.option.es")}</option>
+									<option value="en">{t("settings.language.option.en")}</option>
+								</select>
+							</div>
 							<TogglePill
 								label={t("settings.autoNext.label")}
 								hint={t("settings.autoNext.hint")}

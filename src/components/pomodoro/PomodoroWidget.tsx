@@ -1,5 +1,5 @@
 import { SlidersHorizontal } from "lucide-react";
-import { t } from "@/lib/i18n";
+import { t, useLocale } from "@/lib/i18n";
 import { getModeLabel } from "./pomodoroPreview";
 import { SettingsSheet } from "./SettingsSheet";
 import { TimerActions } from "./TimerActions";
@@ -9,6 +9,7 @@ import { TimerStage } from "./TimerStage";
 import { usePomodoroWidget } from "./usePomodoroWidget";
 
 export function PomodoroWidget() {
+	useLocale();
 	const {
 		pomodoro,
 		state,
@@ -20,11 +21,11 @@ export function PomodoroWidget() {
 	return (
 		<main className="grid h-full w-full place-items-stretch">
 			<section
-				className="relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-[26px] border border-border bg-linear-to-b from-card to-background shadow-[inset_0_1px_0_rgba(255,255,255,.05)] backdrop-blur-[14px]"
+				className="relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-[26px] border border-border/35 bg-linear-to-b from-card to-background shadow-[inset_0_1px_0_rgba(255,255,255,.05)] backdrop-blur-[14px]"
 				data-mode={state.mode}
 				data-status={state.status}
 			>
-				<header className="flex shrink-0 items-center justify-between gap-4 border-b border-border bg-card/50 px-4.5 pb-3.5 pt-4">
+				<header className="flex shrink-0 items-center justify-between gap-4 border-b border-border/35 bg-card/50 px-4.5 pb-3.5 pt-4">
 					<div className="flex min-w-0 items-center gap-2.5">
 						<span
 							className="relative grid size-4.5 shrink-0 place-items-start rounded-md bg-app-icon shadow-[0_0_0_1px_color-mix(in_oklch,var(--app-icon)_32%,transparent)]"
